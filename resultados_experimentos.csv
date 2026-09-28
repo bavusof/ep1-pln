@@ -1,0 +1,5 @@
+experimento,representacao,modelo,acuracia,f1_macro,folds,acuracia_media,desvio_acuracia,f1_macro_medio,desvio_f1_macro,acuracia_treino_media,f1_macro_treino_medio,melhores_parametros,gap_accuracy
+5-Fold CV - Baseline,TF-IDF,Regressão Logística,,,5.0,0.457196967961169,0.005692491726826,0.4556857813123304,0.0054702077531029,0.7100835856833705,0.7094355108401772,,
+Grid Search - TF-IDF + Regressão Logística,TF-IDF,Regressão Logística,,,,0.461327955526332,,0.460150211332511,,,,"{'tfidf__ngram_range': (1, 2), 'logistic__C': 1.0}",0.3556887390447025
+Classe Majoritária,Nenhuma,DummyClassifier,0.343120179149042,0.1703099913548227,,,,,,,,,
+Holdout - Baseline,TF-IDF,Regressão Logística,0.4441403334162727,0.4423350271320891,,,,,,,,,
