@@ -1,150 +1,135 @@
-import pandas as pd
-
-from sklearn.model_selection import StratifiedKFold, cross_validate
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.linear_model import LogisticRegression
 from sklearn.pipeline import Pipeline
 
+from src.config import (
+    N_SPLITS,
+    RANDOM_STATE,
+)
+from src.data import carregar_dados_treino
+from src.evaluation import avaliar_modelo
 from registro_resultados import registrar_resultado
 
 
 # ============================================================
-# 1. CONFIGURAÇÕES
+# CARREGAMENTO DOS DADOS
 # ============================================================
 
-ARQUIVO_TREINO = "train.xlsx"
+X, y = carregar_dados_treino()
 
-COLUNA_TEXTO = "resp_text"
-COLUNA_CLASSE = "clarity"
-
-RANDOM_STATE = 42
-N_SPLITS = 5
-
-
-# ============================================================
-# 2. CARREGAMENTO DOS DADOS
-# ============================================================
-
-df = pd.read_excel(ARQUIVO_TREINO)
-
-df[COLUNA_TEXTO] = df[COLUNA_TEXTO].fillna("").astype(str)
-
-print("Dimensões:", df.shape)
-
-print("\nColunas:")
-print(df.columns.tolist())
+print("Quantidade de exemplos:", len(X))
 
 print("\nDistribuição das classes:")
-print(df[COLUNA_CLASSE].value_counts())
-
-X = df[COLUNA_TEXTO]
-y = df[COLUNA_CLASSE]
+print(y.value_counts())
 
 
 # ============================================================
-# 3. VALIDAÇÃO CRUZADA
-# ============================================================
-
-cv = StratifiedKFold(
-    n_splits=N_SPLITS,
-    shuffle=True,
-    random_state=RANDOM_STATE
-)
-
-
-# ============================================================
-# 4. PIPELINE: TF-IDF + REGRESSÃO LOGÍSTICA
+# PIPELINE BASELINE
 # ============================================================
 
 pipeline_baseline = Pipeline([
-    ("tfidf", TfidfVectorizer()),
-    ("logistic", LogisticRegression(
-        max_iter=1000,
-        random_state=RANDOM_STATE
-    ))
+    (
+        "tfidf",
+        TfidfVectorizer(),
+    ),
+    (
+        "logistic",
+        LogisticRegression(
+            max_iter=1000,
+            random_state=RANDOM_STATE,
+        ),
+    ),
 ])
 
 
 # ============================================================
-# 5. VALIDAÇÃO CRUZADA
+# VALIDAÇÃO CRUZADA
 # ============================================================
 
-# A acurácia é a métrica principal do trabalho.
-# O F1 macro é registrado como métrica complementar.
-
-scores = cross_validate(
+# A função avaliar_modelo centraliza a metodologia de
+# validação utilizada pelo projeto.
+#
+# A mesma função poderá ser reutilizada posteriormente
+# para comparar diferentes modelos e representações.
+scores, resumo, resultados_folds = avaliar_modelo(
     pipeline_baseline,
     X,
     y,
-    cv=cv,
-    scoring={
-        "accuracy": "accuracy",
-        "f1_macro": "f1_macro"
-    },
-    n_jobs=-1,
-    return_train_score=True
 )
 
 
 # ============================================================
-# 6. RESULTADOS POR FOLD
+# RESULTADOS POR FOLD
 # ============================================================
-
-resultados_folds = pd.DataFrame({
-    "fold": range(1, N_SPLITS + 1),
-    "acuracia_treino": scores["train_accuracy"],
-    "acuracia_validacao": scores["test_accuracy"],
-    "f1_macro_treino": scores["train_f1_macro"],
-    "f1_macro_validacao": scores["test_f1_macro"]
-})
 
 print("\n==============================")
-print("VALIDAÇÃO CRUZADA - BASELINE")
+print("BASELINE - 5-FOLD CV")
 print("==============================")
 
-print(resultados_folds.to_string(index=False))
+print(
+    resultados_folds.to_string(index=False)
+)
 
 
 # ============================================================
-# 7. RESUMO
+# RESUMO
 # ============================================================
 
-acuracia_media = float(scores["test_accuracy"].mean())
-acuracia_desvio = float(scores["test_accuracy"].std())
+print("\n==============================")
+print("RESUMO")
+print("==============================")
 
-f1_macro_medio = float(scores["test_f1_macro"].mean())
-f1_macro_desvio = float(scores["test_f1_macro"].std())
+print(
+    f"Accuracy: "
+    f"{resumo['acuracia_media']:.4f} "
+    f"± {resumo['desvio_acuracia']:.4f}"
+)
 
-acuracia_treino_media = float(scores["train_accuracy"].mean())
-f1_treino_medio = float(scores["train_f1_macro"].mean())
+print(
+    f"F1 Macro: "
+    f"{resumo['f1_macro_medio']:.4f} "
+    f"± {resumo['desvio_f1_macro']:.4f}"
+)
 
+print(
+    f"Accuracy treino: "
+    f"{resumo['acuracia_treino_media']:.4f}"
+)
 
-print(f"\nAcurácia média:        {acuracia_media:.4f}")
-print(f"Desvio padrão:         {acuracia_desvio:.4f}")
-print(f"F1 macro médio:        {f1_macro_medio:.4f}")
-print(f"Desvio F1 macro:       {f1_macro_desvio:.4f}")
-print(f"Acurácia treino média: {acuracia_treino_media:.4f}")
-print(f"F1 treino médio:       {f1_treino_medio:.4f}")
+print(
+    f"F1 Macro treino: "
+    f"{resumo['f1_macro_treino_medio']:.4f}"
+)
 
 
 # ============================================================
-# 8. REGISTRO DO RESULTADO
+# REGISTRO DO RESULTADO
 # ============================================================
 
-resultado_baseline_cv = {
+resultado = {
     "experimento": "5-Fold CV - Baseline",
     "representacao": "TF-IDF",
     "modelo": "Regressão Logística",
-    "folds": int(N_SPLITS),
-    "acuracia_media": acuracia_media,
-    "desvio_acuracia": acuracia_desvio,
-    "f1_macro_medio": f1_macro_medio,
-    "desvio_f1_macro": f1_macro_desvio,
-    "acuracia_treino_media": acuracia_treino_media,
-    "f1_macro_treino_medio": f1_treino_medio
+
+    "folds": N_SPLITS,
+
+    "acuracia_media":
+        resumo["acuracia_media"],
+
+    "desvio_acuracia":
+        resumo["desvio_acuracia"],
+
+    "f1_macro_medio":
+        resumo["f1_macro_medio"],
+
+    "desvio_f1_macro":
+        resumo["desvio_f1_macro"],
+
+    "acuracia_treino_media":
+        resumo["acuracia_treino_media"],
+
+    "f1_macro_treino_medio":
+        resumo["f1_macro_treino_medio"],
 }
 
-print("\nResultado:")
-print(resultado_baseline_cv)
-
-registrar_resultado(resultado_baseline_cv)
+registrar_resultado(resultado)
