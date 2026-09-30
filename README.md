@@ -9,10 +9,11 @@ projeto/
 │ └── test.xlsx
 │
 ├── notebooks/
-│ ├── 01_baseline.ipynb
-│ ├── 02_baseline_classe_majoritaria.ipynb
-│ ├── 03_baseline_cross_validation.ipynb
-│ └── 04_baseline_grid_search.ipynb
+│ ├── 01_exploracao.ipynb
+│ ├── 02_baselines.ipynb
+│ ├── 03_tuning.ipynb
+│ ├── 04_comparacao_modelos.ipynb
+│ └── 05_analise_final.ipynb
 │
 ├── src/
 │ ├── config.py
