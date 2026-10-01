@@ -136,3 +136,26 @@ As tabelas detalhadas dos grids ficam em `results/baselines/` e `results/tuning/
 ## Observação
 
 O projeto não exige um novo arquivo Python para cada nova tentativa de ajuste. Para explorar novas configurações, altere o `param_grid` de `experiments/tuning.py`. Para acompanhar uma configuração específica como modelo atual, altere apenas `CURRENT_MODEL` em `experiments/current.py`.
+
+
+## Análise de erros
+
+Para analisar os erros do modelo atual:
+
+```bash
+python -m experiments.error_analysis
+```
+
+O modo padrão utiliza um holdout estratificado de 20%, com `random_state=42`, para inspeção detalhada dos exemplos. A análise também possui um modo `oof` disponível em `experiments/error_analysis.py` quando for desejável obter previsões out-of-fold.
+
+Os resultados são salvos em `results/error_analysis/`:
+
+- `predicoes_holdout.csv`: previsões detalhadas, probabilidades, confiança e características simples do texto.
+- `matriz_confusao_holdout.csv`: matriz de confusão.
+- `classification_report_holdout.csv`: precision, recall e F1 por classe.
+- `resumo_erros_holdout.csv`: principais pares de classes confundidas.
+- `erros_mais_confiantes_holdout.csv`: erros nos quais o modelo estava mais confiante.
+- `erros_mais_ambiguous_holdout.csv`: erros nos quais o modelo estava menos confiante.
+- `analise_por_tamanho_holdout.csv`: desempenho por faixa de número de palavras.
+
+As colunas `ocorrencias_texto`, `classes_associadas_texto` e `texto_conflitante` são calculadas usando o corpus completo, permitindo identificar duplicatas e textos associados a mais de uma classe.
