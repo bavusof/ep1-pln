@@ -1,60 +1,34 @@
 import pandas as pd
 
-from src.config import (
-    ARQUIVO_TREINO,
-    COLUNA_TEXTO,
-    COLUNA_CLASSE,
-)
+from src.config import ARQUIVO_TREINO, COLUNA_CLASSE, COLUNA_TEXTO
 
 
-# ============================================================
-# CARREGAMENTO DOS DADOS
-# ============================================================
-
-def carregar_dados_treino():
-    """
-    Carrega o conjunto de treinamento e realiza apenas
-    as transformações básicas necessárias.
-
-    Importante:
-    Não fazemos TF-IDF, normalização ou qualquer outra
-    transformação aprendida aqui.
-
-    Essas transformações devem permanecer dentro dos
-    Pipelines dos modelos para evitar data leakage.
-    """
+def carregar_dataframe_treino() -> pd.DataFrame:
+    """Carrega o DataFrame completo e aplica apenas tratamentos básicos."""
+    if not ARQUIVO_TREINO.exists():
+        raise FileNotFoundError(
+            f"Arquivo de treino não encontrado: {ARQUIVO_TREINO}\n"
+            "Coloque train.xlsx dentro da pasta data/."
+        )
 
     df = pd.read_excel(ARQUIVO_TREINO)
+
+    colunas_obrigatorias = {COLUNA_TEXTO, COLUNA_CLASSE}
+    colunas_ausentes = colunas_obrigatorias - set(df.columns)
+    if colunas_ausentes:
+        raise ValueError(
+            "O arquivo de treino não possui as colunas obrigatórias: "
+            f"{sorted(colunas_ausentes)}"
+        )
 
     # Respostas ausentes são tratadas como texto vazio.
-    # A conversão para string garante compatibilidade
-    # com o TfidfVectorizer.
-    df[COLUNA_TEXTO] = (
-        df[COLUNA_TEXTO]
-        .fillna("")
-        .astype(str)
-    )
-
-    X = df[COLUNA_TEXTO]
-    y = df[COLUNA_CLASSE]
-
-    return X, y
-
-
-def carregar_dataframe_treino():
-    """
-    Retorna o DataFrame completo.
-
-    Útil para análises exploratórias, distribuição
-    das classes e inspeção dos dados.
-    """
-
-    df = pd.read_excel(ARQUIVO_TREINO)
-
-    df[COLUNA_TEXTO] = (
-        df[COLUNA_TEXTO]
-        .fillna("")
-        .astype(str)
-    )
+    # A conversão para string garante compatibilidade com os vetorizadores.
+    df[COLUNA_TEXTO] = df[COLUNA_TEXTO].fillna("").astype(str)
 
     return df
+
+
+def carregar_dados_treino():
+    """Retorna X (textos) e y (classes)."""
+    df = carregar_dataframe_treino()
+    return df[COLUNA_TEXTO], df[COLUNA_CLASSE]
