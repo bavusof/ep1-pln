@@ -32,7 +32,7 @@ EXPERIMENTS = {
             "tfidf__min_df": [1, 2, 5],
             "tfidf__sublinear_tf": [False, True],
             "tfidf__max_df": [1.0],
-            "logistic__C": [1.0],
+            "logistic__C": [(0.05), (0.10), (0.15), (0.25), (0.50), (1.00)]
         },
         "result_columns": [
             "param_tfidf__ngram_range",

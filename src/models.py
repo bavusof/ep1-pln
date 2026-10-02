@@ -3,6 +3,7 @@ from typing import Any, Mapping
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.linear_model import LogisticRegression
 from sklearn.pipeline import FeatureUnion, Pipeline
+from sklearn.feature_selection import SelectPercentile, chi2
 
 from src.config import RANDOM_STATE
 
@@ -70,8 +71,12 @@ def criar_pipeline_tfidf_word(
     max_df=1.0,
     sublinear_tf=False,
     C=1.0,
+    preprocessor=None,
+    stop_words=None,
+    strip_accents=None,
 ) -> Pipeline:
     """Cria TF-IDF de palavras + Regressão Logística."""
+
     return Pipeline(
         [
             (
@@ -81,9 +86,15 @@ def criar_pipeline_tfidf_word(
                     min_df=min_df,
                     max_df=max_df,
                     sublinear_tf=sublinear_tf,
+                    preprocessor=preprocessor,
+                    stop_words=stop_words,
+                    strip_accents=strip_accents,
                 ),
             ),
-            ("logistic", criar_regressao_logistica(C=C)),
+            (
+                "logistic",
+                criar_regressao_logistica(C=C)
+            ),
         ]
     )
 
@@ -166,6 +177,9 @@ def criar_pipeline(config: Mapping[str, Any]) -> Pipeline:
     if tipo == "tfidf_word_char":
         return criar_pipeline_tfidf_word_char(**parametros)
 
+    if tipo == "tfidf_word_selecao":
+        return criar_pipeline_tfidf_word_selecao(**parametros)
+
     raise ValueError(f"Tipo de pipeline desconhecido: {tipo}")
 
 
@@ -174,3 +188,48 @@ def criar_baseline_majoritario() -> Any:
     from sklearn.dummy import DummyClassifier
 
     return DummyClassifier(strategy="most_frequent")
+
+def criar_pipeline_tfidf_word_selecao(
+    *,
+    ngram_range=(1, 2),
+    min_df=5,
+    max_df=1.0,
+    sublinear_tf=True,
+    C=0.5,
+    percentile=100,
+    preprocessor=None,
+    stop_words=None,
+    strip_accents=None,
+) -> Pipeline:
+    """
+    Cria TF-IDF de palavras + seleção de atributos por
+    qui-quadrado + Regressão Logística.
+    """
+
+    return Pipeline(
+        [
+            (
+                "tfidf",
+                criar_tfidf_word(
+                    ngram_range=ngram_range,
+                    min_df=min_df,
+                    max_df=max_df,
+                    sublinear_tf=sublinear_tf,
+                    preprocessor=preprocessor,
+                    stop_words=stop_words,
+                    strip_accents=strip_accents,
+                ),
+            ),
+            (
+                "selection",
+                SelectPercentile(
+                    score_func=chi2,
+                    percentile=percentile,
+                ),
+            ),
+            (
+                "logistic",
+                criar_regressao_logistica(C=C),
+            ),
+        ]
+    )
