@@ -7,6 +7,8 @@ from sklearn.feature_selection import SelectPercentile, chi2
 from sklearn.preprocessing import StandardScaler
 from sklearn.svm import LinearSVC
 
+from src.embeddings import TfidfWeightedWord2VecDocumentTransformer, Word2VecDocumentTransformer
+
 from src.features import TextStructuralFeatures
 
 from src.config import RANDOM_STATE
@@ -243,7 +245,6 @@ def criar_pipeline_tfidf_caracteres(
         ]
     )
 
-
 def criar_pipeline_tfidf_word_char(
     *,
     word_ngram_range=(1, 2),
@@ -279,39 +280,6 @@ def criar_pipeline_tfidf_word_char(
             ("logistic", criar_regressao_logistica(C=C)),
         ]
     )
-
-
-def criar_pipeline(config: Mapping[str, Any]) -> Pipeline:
-    """Cria um pipeline a partir de uma configuração de experimento."""
-    tipo = config["tipo"]
-    parametros = config.get("parametros", {})
-
-    if tipo == "tfidf_word":
-        return criar_pipeline_tfidf_word(**parametros)
-
-    if tipo == "tfidf_char":
-        return criar_pipeline_tfidf_caracteres(**parametros)
-
-    if tipo == "tfidf_word_char":
-        return criar_pipeline_tfidf_word_char(**parametros)
-
-    if tipo == "tfidf_word_selecao":
-        return criar_pipeline_tfidf_word_selecao(**parametros)
-
-    if tipo == "tfidf_word_structural":
-        return criar_pipeline_tfidf_word_structural(**parametros)
-
-    if tipo == "tfidf_word_structural_svc":
-        return criar_pipeline_tfidf_word_structural_svc(**parametros)
-
-    raise ValueError(f"Tipo de pipeline desconhecido: {tipo}")
-
-
-def criar_baseline_majoritario() -> Any:
-    """Cria o baseline que sempre prevê a classe mais frequente."""
-    from sklearn.dummy import DummyClassifier
-
-    return DummyClassifier(strategy="most_frequent")
 
 def criar_pipeline_tfidf_word_selecao(
     *,
@@ -357,3 +325,228 @@ def criar_pipeline_tfidf_word_selecao(
             ),
         ]
     )
+
+def criar_pipeline_word2vec(
+    *,
+    vector_size=200,
+    window=5,
+    min_count=2,
+    epochs=5,
+    sg=1,
+    C=0.5,
+) -> Pipeline:
+    """Word2Vec documental + Regressão Logística."""
+
+    return Pipeline(
+        [
+            (
+                "embedding",
+                Word2VecDocumentTransformer(
+                    vector_size=vector_size,
+                    window=window,
+                    min_count=min_count,
+                    epochs=epochs,
+                    sg=sg,
+                    workers=1,
+                    seed=RANDOM_STATE,
+                ),
+            ),
+            (
+                "scale",
+                StandardScaler(),
+            ),
+            (
+                "logistic",
+                criar_regressao_logistica(C=C),
+            ),
+        ]
+    )
+
+def criar_pipeline_tfidf_weighted_word2vec(
+    *,
+    vector_size=200,
+    window=5,
+    min_count=2,
+    epochs=5,
+    sg=1,
+    C=0.5,
+    tfidf_ngram_range=(1, 1),
+    tfidf_min_df=5,
+    tfidf_max_df=1.0,
+    tfidf_sublinear_tf=True,
+    tfidf_preprocessor=None,
+    tfidf_stop_words=None,
+    tfidf_strip_accents=None,
+) -> Pipeline:
+    """
+    TF-IDF-weighted Word2Vec + Regressão Logística.
+
+    O TF-IDF fornece a importância das palavras e o Word2Vec
+    fornece a representação semântica.
+    """
+
+    return Pipeline(
+        [
+            (
+                "embedding",
+                TfidfWeightedWord2VecDocumentTransformer(
+                    vector_size=vector_size,
+                    window=window,
+                    min_count=min_count,
+                    epochs=epochs,
+                    sg=sg,
+                    workers=1,
+                    seed=RANDOM_STATE,
+                    tfidf_ngram_range=tfidf_ngram_range,
+                    tfidf_min_df=tfidf_min_df,
+                    tfidf_max_df=tfidf_max_df,
+                    tfidf_sublinear_tf=tfidf_sublinear_tf,
+                    tfidf_preprocessor=tfidf_preprocessor,
+                    tfidf_stop_words=tfidf_stop_words,
+                    tfidf_strip_accents=tfidf_strip_accents,
+                ),
+            ),
+            (
+                "scale",
+                StandardScaler(),
+            ),
+            (
+                "logistic",
+                criar_regressao_logistica(C=C),
+            ),
+        ]
+    )
+
+def criar_pipeline_hybrid_tfidf_word2vec(
+    *,
+    word_ngram_range=(1, 2),
+    word_min_df=5,
+    word_max_df=1.0,
+    word_sublinear_tf=True,
+    vector_size=200,
+    window=5,
+    min_count=2,
+    epochs=5,
+    sg=1,
+    embedding_tfidf_ngram_range=(1, 1),
+    embedding_tfidf_min_df=5,
+    embedding_tfidf_max_df=1.0,
+    embedding_tfidf_sublinear_tf=True,
+    embedding_weight=0.5,
+    C=0.5,
+) -> Pipeline:
+    """
+    Híbrido:
+
+        TF-IDF de palavras
+                +
+        TF-IDF-weighted Word2Vec
+
+    seguido de Regressão Logística.
+    """
+
+    features = FeatureUnion(
+        [
+            (
+                "tfidf",
+                criar_tfidf_word(
+                    ngram_range=word_ngram_range,
+                    min_df=word_min_df,
+                    max_df=word_max_df,
+                    sublinear_tf=word_sublinear_tf,
+                ),
+            ),
+            (
+                "embedding",
+                Pipeline(
+                    [
+                        (
+                            "weighted_word2vec",
+                            TfidfWeightedWord2VecDocumentTransformer(
+                                vector_size=vector_size,
+                                window=window,
+                                min_count=min_count,
+                                epochs=epochs,
+                                sg=sg,
+                                workers=1,
+                                seed=RANDOM_STATE,
+                                tfidf_ngram_range=(
+                                    embedding_tfidf_ngram_range
+                                ),
+                                tfidf_min_df=(
+                                    embedding_tfidf_min_df
+                                ),
+                                tfidf_max_df=(
+                                    embedding_tfidf_max_df
+                                ),
+                                tfidf_sublinear_tf=(
+                                    embedding_tfidf_sublinear_tf
+                                ),
+                            ),
+                        ),
+                        (
+                            "scale",
+                            StandardScaler(),
+                        ),
+                    ]
+                ),
+            ),
+        ],
+        transformer_weights={
+            "embedding": embedding_weight,
+        },
+    )
+
+    return Pipeline(
+        [
+            (
+                "features",
+                features,
+            ),
+            (
+                "logistic",
+                criar_regressao_logistica(C=C),
+            ),
+        ]
+    )
+
+def criar_pipeline(config: Mapping[str, Any]) -> Pipeline:
+    """Cria um pipeline a partir de uma configuração de experimento."""
+    tipo = config["tipo"]
+    parametros = config.get("parametros", {})
+
+    if tipo == "tfidf_word":
+        return criar_pipeline_tfidf_word(**parametros)
+
+    if tipo == "tfidf_char":
+        return criar_pipeline_tfidf_caracteres(**parametros)
+
+    if tipo == "tfidf_word_char":
+        return criar_pipeline_tfidf_word_char(**parametros)
+
+    if tipo == "tfidf_word_selecao":
+        return criar_pipeline_tfidf_word_selecao(**parametros)
+
+    if tipo == "tfidf_word_structural":
+        return criar_pipeline_tfidf_word_structural(**parametros)
+
+    if tipo == "tfidf_word_structural_svc":
+        return criar_pipeline_tfidf_word_structural_svc(**parametros)
+
+    if tipo == "word2vec":
+        return criar_pipeline_word2vec(**parametros)
+
+    if tipo == "tfidf_weighted_word2vec":
+        return criar_pipeline_tfidf_weighted_word2vec(**parametros)
+
+    if tipo == "hybrid_tfidf_word2vec":
+        return criar_pipeline_hybrid_tfidf_word2vec(**parametros)
+
+    raise ValueError(f"Tipo de pipeline desconhecido: {tipo}")
+
+
+def criar_baseline_majoritario() -> Any:
+    """Cria o baseline que sempre prevê a classe mais frequente."""
+    from sklearn.dummy import DummyClassifier
+
+    return DummyClassifier(strategy="most_frequent")
