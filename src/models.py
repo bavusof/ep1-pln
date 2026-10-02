@@ -4,12 +4,16 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.linear_model import LogisticRegression
 from sklearn.pipeline import FeatureUnion, Pipeline
 from sklearn.feature_selection import SelectPercentile, chi2
+from sklearn.preprocessing import StandardScaler
+from sklearn.svm import LinearSVC
+
+from src.features import TextStructuralFeatures
 
 from src.config import RANDOM_STATE
 
 
 DEFAULT_LOGISTIC_PARAMS = {
-    "max_iter": 1000,
+    "max_iter": 3000,
     "random_state": RANDOM_STATE,
 }
 
@@ -63,6 +67,120 @@ def criar_tfidf_caracteres(
         **kwargs,
     )
 
+def criar_features_word_structural(
+    *,
+    ngram_range=(1, 2),
+    min_df=5,
+    max_df=1.0,
+    sublinear_tf=True,
+    structural_weight=1.0,
+):
+    """
+    Combina TF-IDF de palavras com características estruturais.
+    """
+
+    return FeatureUnion(
+        [
+            (
+                "tfidf",
+                criar_tfidf_word(
+                    ngram_range=ngram_range,
+                    min_df=min_df,
+                    max_df=max_df,
+                    sublinear_tf=sublinear_tf,
+                ),
+            ),
+            (
+                "structural",
+                Pipeline(
+                    [
+                        (
+                            "extract",
+                            TextStructuralFeatures(),
+                        ),
+                        (
+                            "scale",
+                            StandardScaler(
+                                with_mean=False,
+                            ),
+                        ),
+                    ]
+                ),
+            ),
+        ],
+        transformer_weights={
+            "structural": structural_weight,
+        },
+    )
+
+def criar_pipeline_tfidf_word_structural(
+    *,
+    ngram_range=(1, 2),
+    min_df=5,
+    max_df=1.0,
+    sublinear_tf=True,
+    C=0.5,
+    structural_weight=1.0,
+) -> Pipeline:
+    """TF-IDF de palavras + features estruturais + LR."""
+
+    features = criar_features_word_structural(
+        ngram_range=ngram_range,
+        min_df=min_df,
+        max_df=max_df,
+        sublinear_tf=sublinear_tf,
+        structural_weight=structural_weight,
+    )
+
+    return Pipeline(
+        [
+            (
+                "features",
+                features,
+            ),
+            (
+                "logistic",
+                criar_regressao_logistica(
+                    C=C
+                ),
+            ),
+        ]
+    )
+
+def criar_pipeline_tfidf_word_structural_svc(
+    *,
+    ngram_range=(1, 2),
+    min_df=5,
+    max_df=1.0,
+    sublinear_tf=True,
+    C=0.25,
+    structural_weight=1.0,
+) -> Pipeline:
+    """TF-IDF de palavras + features estruturais + LinearSVC."""
+
+    features = criar_features_word_structural(
+        ngram_range=ngram_range,
+        min_df=min_df,
+        max_df=max_df,
+        sublinear_tf=sublinear_tf,
+        structural_weight=structural_weight,
+    )
+
+    return Pipeline(
+        [
+            (
+                "features",
+                features,
+            ),
+            (
+                "svc",
+                LinearSVC(
+                    C=C,
+                    random_state=RANDOM_STATE,
+                ),
+            ),
+        ]
+    )
 
 def criar_pipeline_tfidf_word(
     *,
@@ -179,6 +297,12 @@ def criar_pipeline(config: Mapping[str, Any]) -> Pipeline:
 
     if tipo == "tfidf_word_selecao":
         return criar_pipeline_tfidf_word_selecao(**parametros)
+
+    if tipo == "tfidf_word_structural":
+        return criar_pipeline_tfidf_word_structural(**parametros)
+
+    if tipo == "tfidf_word_structural_svc":
+        return criar_pipeline_tfidf_word_structural_svc(**parametros)
 
     raise ValueError(f"Tipo de pipeline desconhecido: {tipo}")
 
