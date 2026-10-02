@@ -1,0 +1,7 @@
+{
+  "model_name": "alfaneo/bertimbau-base-portuguese-sts",
+  "batch_size": 16,
+  "normalize_embeddings": true,
+  "n_documents": 20092,
+  "dimension": 768
+}

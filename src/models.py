@@ -1,9 +1,12 @@
 from typing import Any, Mapping
 
+import numpy as np
+
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.linear_model import LogisticRegression
 from sklearn.pipeline import FeatureUnion, Pipeline
 from sklearn.feature_selection import SelectPercentile, chi2
+from sklearn.base import BaseEstimator, ClassifierMixin
 from sklearn.preprocessing import StandardScaler
 from sklearn.svm import LinearSVC
 
@@ -12,6 +15,209 @@ from src.embeddings import TfidfWeightedWord2VecDocumentTransformer, Word2VecDoc
 from src.features import TextStructuralFeatures
 
 from src.config import RANDOM_STATE
+
+
+
+class HierarchicalClarityClassifier(BaseEstimator, ClassifierMixin):
+    """
+    Classificador hierárquico em duas etapas para as classes
+    c1, c234 e c5.
+
+    Etapa 1:
+        c234 vs. não-c234
+
+    Etapa 2:
+        c1 vs. c5
+
+    O limiar controla a decisão pela classe c234. Todo o treinamento
+    ocorre no fold corrente quando o estimador é usado dentro do CV.
+    """
+
+    def __init__(
+        self,
+        *,
+        word_ngram_range=(1, 2),
+        word_min_df=5,
+        word_max_df=1.0,
+        word_sublinear_tf=True,
+        C_c234=0.5,
+        C_c1_c5=0.5,
+        c234_threshold=0.5,
+    ):
+        self.word_ngram_range = word_ngram_range
+        self.word_min_df = word_min_df
+        self.word_max_df = word_max_df
+        self.word_sublinear_tf = word_sublinear_tf
+        self.C_c234 = C_c234
+        self.C_c1_c5 = C_c1_c5
+        self.c234_threshold = c234_threshold
+
+    @staticmethod
+    def _subconjunto(X, mask):
+        if hasattr(X, "iloc"):
+            return X.iloc[np.asarray(mask)]
+        return np.asarray(X)[np.asarray(mask)]
+
+    def fit(self, X, y):
+        y_array = np.asarray(y)
+
+        classes_presentes = set(y_array.tolist())
+        esperadas = {"c1", "c234", "c5"}
+
+        if classes_presentes != esperadas:
+            raise ValueError(
+                "O classificador hierárquico espera exatamente "
+                f"as classes {sorted(esperadas)}, mas recebeu "
+                f"{sorted(classes_presentes)}."
+            )
+
+        # ----------------------------------------------------
+        # Etapa 1: c234 vs. não-c234
+        # ----------------------------------------------------
+
+        y_primeira = (y_array == "c234").astype(int)
+
+        self.classificador_c234_ = Pipeline(
+            [
+                (
+                    "tfidf",
+                    criar_tfidf_word(
+                        ngram_range=self.word_ngram_range,
+                        min_df=self.word_min_df,
+                        max_df=self.word_max_df,
+                        sublinear_tf=self.word_sublinear_tf,
+                    ),
+                ),
+                (
+                    "logistic",
+                    criar_regressao_logistica(
+                        C=self.C_c234,
+                    ),
+                ),
+            ]
+        )
+
+        self.classificador_c234_.fit(
+            X,
+            y_primeira,
+        )
+
+        # ----------------------------------------------------
+        # Etapa 2: c1 vs. c5
+        # ----------------------------------------------------
+
+        mask_nao_c234 = y_array != "c234"
+
+        X_segunda = self._subconjunto(
+            X,
+            mask_nao_c234,
+        )
+        y_segunda = y_array[mask_nao_c234]
+
+        self.classificador_c1_c5_ = Pipeline(
+            [
+                (
+                    "tfidf",
+                    criar_tfidf_word(
+                        ngram_range=self.word_ngram_range,
+                        min_df=self.word_min_df,
+                        max_df=self.word_max_df,
+                        sublinear_tf=self.word_sublinear_tf,
+                    ),
+                ),
+                (
+                    "logistic",
+                    criar_regressao_logistica(
+                        C=self.C_c1_c5,
+                    ),
+                ),
+            ]
+        )
+
+        self.classificador_c1_c5_.fit(
+            X_segunda,
+            y_segunda,
+        )
+
+        self.classes_ = np.array(
+            ["c1", "c234", "c5"],
+            dtype=object,
+        )
+
+        return self
+
+    def predict_proba(self, X):
+        p_primeira = (
+            self.classificador_c234_
+            .predict_proba(X)
+        )
+
+        indice_c234 = int(
+            np.where(
+                self.classificador_c234_.classes_ == 1
+            )[0][0]
+        )
+
+        p_c234 = p_primeira[:, indice_c234]
+        p_nao_c234 = 1.0 - p_c234
+
+        p_segunda = (
+            self.classificador_c1_c5_
+            .predict_proba(X)
+        )
+
+        indice_c1 = int(
+            np.where(
+                self.classificador_c1_c5_.classes_ == "c1"
+            )[0][0]
+        )
+
+        indice_c5 = int(
+            np.where(
+                self.classificador_c1_c5_.classes_ == "c5"
+            )[0][0]
+        )
+
+        p_c1_cond = p_segunda[:, indice_c1]
+        p_c5_cond = p_segunda[:, indice_c5]
+
+        probabilidades = np.column_stack(
+            [
+                p_nao_c234 * p_c1_cond,
+                p_c234,
+                p_nao_c234 * p_c5_cond,
+            ]
+        )
+
+        return probabilidades
+
+    def predict(self, X):
+        probabilidades = self.predict_proba(X)
+
+        predicoes = np.empty(
+            len(probabilidades),
+            dtype=object,
+        )
+
+        p_c1 = probabilidades[:, 0]
+        p_c234 = probabilidades[:, 1]
+        p_c5 = probabilidades[:, 2]
+
+        escolhe_c234 = (
+            p_c234 >= self.c234_threshold
+        )
+
+        predicoes[escolhe_c234] = "c234"
+
+        restantes = ~escolhe_c234
+
+        predicoes[restantes] = np.where(
+            p_c1[restantes] >= p_c5[restantes],
+            "c1",
+            "c5",
+        )
+
+        return predicoes
 
 
 DEFAULT_LOGISTIC_PARAMS = {
@@ -541,6 +747,9 @@ def criar_pipeline(config: Mapping[str, Any]) -> Pipeline:
 
     if tipo == "hybrid_tfidf_word2vec":
         return criar_pipeline_hybrid_tfidf_word2vec(**parametros)
+
+    if tipo == "hierarchical_tfidf":
+        return HierarchicalClarityClassifier(**parametros)
 
     raise ValueError(f"Tipo de pipeline desconhecido: {tipo}")
 
