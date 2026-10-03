@@ -226,3 +226,4 @@ models/
 data/test*.xlsx
 logs/
 results/submission/test_fake*
+results/incremental/cache/
