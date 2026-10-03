@@ -107,3 +107,31 @@ CURRENT_MODEL_FILE = SUMMARY_RESULTS_DIR / "current_model.json"
 # ============================================================
 
 ERROR_ANALYSIS_DIR = RESULTS_DIR / "error_analysis"
+
+# ============================================================
+# FINE-TUNING BERT
+# ============================================================
+
+FINETUNE_MODEL_NAME = "neuralmind/bert-base-portuguese-cased"
+FINETUNE_PARAMS = {
+    "max_length": 256,
+    "head_tokens": 128,
+    "epochs": 3,
+    "batch_size": 16,
+    "learning_rate": 2e-5,
+    "weight_decay": 0.01,
+    "warmup_ratio": 0.1,
+}
+FINETUNE_RESULTS_DIR = RESULTS_DIR / "finetune"
+FINETUNE_HOLDOUT_PROBS_FILE = FINETUNE_RESULTS_DIR / "bert_holdout_probs.csv"
+FINETUNE_HISTORY_FILE = FINETUNE_RESULTS_DIR / "bert_holdout_history.csv"
+MODELS_DIR = ROOT_DIR / "models"
+FINETUNE_FULL_MODEL_DIR = MODELS_DIR / "bert_finetuned_full"
+
+# ============================================================
+# ENSEMBLE E PREDIÇÃO FINAL
+# ============================================================
+
+ENSEMBLE_RESULTS_FILE = TUNING_RESULTS_DIR / "ensemble_holdout.csv"
+ARQUIVO_TESTE = DATA_DIR / "test.xlsx"
+ARQUIVO_PREDICOES = RESULTS_DIR / "submission" / "test_rotulado.xlsx"

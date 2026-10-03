@@ -216,3 +216,13 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Projeto
+ep1-enunciado.pdf
+.idea/
+results/embeddings/
+results/finetune/
+models/
+data/test*.xlsx
+logs/
+results/submission/test_fake*

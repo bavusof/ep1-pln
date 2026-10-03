@@ -1,0 +1,6 @@
+modelo,pesos,accuracy,accuracy_honesta
+bert,{'bert': 1.0},0.45309778551878577,
+tfidf_word,{'tfidf_word': 1.0},0.4441403334162727,
+tfidf_char,{'tfidf_char': 1.0},0.4493655138094053,
+ensemble,"{'bert': 0.25, 'tfidf_word': 0.45, 'tfidf_char': 0.3}",0.4652898731027619,0.4588226116802746
+ensemble+lookup,"{'bert': 0.25, 'tfidf_word': 0.45, 'tfidf_char': 0.3}",0.46703159990047277,
