@@ -151,7 +151,7 @@ for experiment_id, config in EXPERIMENTOS.items():
             "accuracy": "accuracy",
             "f1_macro": "f1_macro",
         },
-        n_jobs=2,
+        n_jobs=-1,
         return_train_score=True,
         error_score="raise",
     )

@@ -71,6 +71,8 @@ TUNING_HIERARCHICAL_TFIDF_FILE = TUNING_RESULTS_DIR / "hierarchical_tfidf.csv"
 TUNING_SENTENCE_TRANSFORMER_FILE = TUNING_RESULTS_DIR / "sentence_transformer.csv"
 TUNING_HYBRID_TFIDF_SENTENCE_TRANSFORMER_FILE = TUNING_RESULTS_DIR / "hybrid_tfidf_sentence_transformer.csv"
 TUNING_HYBRID_TFIDF_SENTENCE_TRANSFORMER_FOLDS_FILE = TUNING_RESULTS_DIR / "hybrid_tfidf_sentence_transformer_folds_5fold.csv"
+TUNING_LINEAR_SVC_FILE = TUNING_RESULTS_DIR / "linear_svc_grid.csv"
+TUNING_LINEAR_SVC_FOLDS_FILE = TUNING_RESULTS_DIR / "linear_svc_folds_5fold.csv"
 
 # ============================================================
 # SENTENCE TRANSFORMER

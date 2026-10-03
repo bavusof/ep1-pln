@@ -121,7 +121,7 @@ grid = GridSearchCV(
         "f1_macro": "f1_macro",
     },
     refit="accuracy",
-    n_jobs=2,
+    n_jobs=-1,
     return_train_score=True,
     error_score="raise",
 )

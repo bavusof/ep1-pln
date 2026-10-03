@@ -716,6 +716,48 @@ def criar_pipeline_hybrid_tfidf_word2vec(
         ]
     )
 
+def criar_linear_svc(C: float = 0.25) -> LinearSVC:
+    """Cria um LinearSVC padrão para classificação textual."""
+    return LinearSVC(
+        C=C,
+        random_state=RANDOM_STATE,
+    )
+
+
+def criar_pipeline_tfidf_word_svc(
+    *,
+    ngram_range=(1, 2),
+    min_df=1,
+    max_df=1.0,
+    sublinear_tf=True,
+    lowercase=True,
+    token_pattern=r"(?u)\b\w\w+\b",
+    C=0.25,
+) -> Pipeline:
+    """
+    Cria TF-IDF de palavras + LinearSVC.
+    """
+
+    return Pipeline(
+        [
+            (
+                "tfidf",
+                criar_tfidf_word(
+                    ngram_range=ngram_range,
+                    min_df=min_df,
+                    max_df=max_df,
+                    sublinear_tf=sublinear_tf,
+                    lowercase=lowercase,
+                    token_pattern=token_pattern,
+                ),
+            ),
+            (
+                "svc",
+                criar_linear_svc(C=C),
+            ),
+        ]
+    )
+
 def criar_pipeline(config: Mapping[str, Any]) -> Pipeline:
     """Cria um pipeline a partir de uma configuração de experimento."""
     tipo = config["tipo"]

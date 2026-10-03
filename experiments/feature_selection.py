@@ -90,7 +90,7 @@ grid = criar_grid_search(
     param_grid,
     cv=None,
     n_splits=N_SPLITS_EXPLORATORIA,
-    n_jobs=2,
+    n_jobs=-1,
 )
 
 

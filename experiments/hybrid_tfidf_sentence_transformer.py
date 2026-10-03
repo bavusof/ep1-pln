@@ -38,11 +38,8 @@ from src.sentence_embeddings import (
 # TF-IDF BASE
 # ============================================================
 
-TFIDF_PARAMS = {
-    "ngram_range": (1, 2),
-    "min_df": 5,
+TFIDF_BASE_PARAMS = {
     "max_df": 1.0,
-    "sublinear_tf": True,
 }
 
 
@@ -52,19 +49,38 @@ TFIDF_PARAMS = {
 
 PARAM_GRID = {
     "embedding_weight": [
-        0.05,
-        0.10,
-        0.25,
-        0.50,
-        1.00,
+        # 0.1,
+        0.2,
+        # 0.3,
+        0.4,
+        0.6,
+        # 0.7,
+        0.8,
+        # 0.9,
+        # 1.0,
     ],
+
     "C": [
         0.25,
         0.50,
         1.00,
     ],
-}
 
+    "ngram_range": [
+        # (1, 1),
+        (1, 2),
+    ],
+
+    "min_df": [
+        1,
+        5,
+    ],
+
+    "sublinear_tf": [
+        False,
+        True,
+    ],
+}
 
 def calcular_metricas(y_true, y_pred):
     """Calcula as métricas utilizadas no projeto."""
@@ -134,7 +150,16 @@ def avaliar_configuracao(
         # ====================================================
 
         tfidf = TfidfVectorizer(
-            **TFIDF_PARAMS
+            ngram_range=tuple(
+                config["ngram_range"]
+            ),
+            min_df=int(
+                config["min_df"]
+            ),
+            max_df=1.0,
+            sublinear_tf=bool(
+                config["sublinear_tf"]
+            ),
         )
 
         X_train_tfidf = (
@@ -382,11 +407,6 @@ def main():
     print(
         "Dimensão dos embeddings:",
         embeddings.shape[1],
-    )
-
-    print(
-        "TF-IDF:",
-        TFIDF_PARAMS,
     )
 
     configuracoes = list(
@@ -662,15 +682,20 @@ def main():
                             embeddings.shape[1]
                         ),
 
-                    "tfidf":
-                        TFIDF_PARAMS,
-
                     "embedding_weight":
                         float(
                             melhor_config[
                                 "embedding_weight"
                             ]
                         ),
+
+                    "ngram_range": melhor_config["ngram_range"],
+
+                    "min_df": int(melhor_config["min_df"]),
+                    
+                    "sublinear_tf": bool(
+                        melhor_config["sublinear_tf"]
+                    ),
 
                     "C":
                         float(

@@ -188,7 +188,7 @@ def executar_tuning(nome: str) -> tuple[dict, pd.DataFrame]:
         pipeline,
         config["param_grid"],
         cv=cv_exploratoria,
-        n_jobs=2,
+        n_jobs=-1,
     )
     grid.fit(X, y)
 
