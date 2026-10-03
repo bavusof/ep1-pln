@@ -115,9 +115,12 @@ def imprimir_degrau(linha, diag, config=None) -> None:
     print(f"DEGRAU {linha['degrau']}: {linha['mudanca']}")
     print("=" * 60)
     print(f"Hipótese: {linha['hipotese']}")
-    print(f"Accuracy: {linha['accuracy']:.4f} ± {linha['accuracy_std']:.4f} ({linha['protocolo']})")
+    std = f" ± {linha['accuracy_std']:.4f}" if linha.get("accuracy_std") is not None else ""
+    print(f"Accuracy: {linha['accuracy']:.4f}{std} ({linha['protocolo']})")
     if linha["delta"] is not None:
-        print(f"Delta: {linha['delta']:+.4f} | folds vencidos: {linha['folds_vencidos']}/5 | mantido: {linha.get('mantido')}")
+        vencidos = linha.get("folds_vencidos")
+        trecho_folds = f" | folds vencidos: {vencidos}/5" if vencidos is not None else ""
+        print(f"Delta: {linha['delta']:+.4f}{trecho_folds} | mantido: {linha.get('mantido')}")
     if linha.get("holdout_accuracy") is not None:
         print(f"Holdout: {linha['holdout_accuracy']:.4f}")
     if diag is not None:
