@@ -1,1 +1,10 @@
-
+degrau,config,accuracy,accuracy_std,delta,folds_vencidos
+1,"{'word': {'ngram_range': (1, 1), 'min_df': 1, 'max_df': 1.0, 'sublinear_tf': True}, 'preprocessor': None, 'char': None, 'structural_weight': None, 'C': 1.0, 'lookup': False}",0.45316443853845634,0.004098222723641352,-0.00029925086912852006,2
+2,"{'word': {'ngram_range': (1, 1), 'min_df': 2, 'max_df': 1.0, 'sublinear_tf': False}, 'preprocessor': None, 'char': None, 'structural_weight': None, 'C': 1.0, 'lookup': False}",0.4521200715922079,0.004773899850272129,-0.0013436178153769518,0
+2,"{'word': {'ngram_range': (1, 1), 'min_df': 3, 'max_df': 1.0, 'sublinear_tf': False}, 'preprocessor': None, 'char': None, 'structural_weight': None, 'C': 1.0, 'lookup': False}",0.4520703823174582,0.004491034176222972,-0.0013933070901266387,1
+2,"{'word': {'ngram_range': (1, 1), 'min_df': 5, 'max_df': 1.0, 'sublinear_tf': False}, 'preprocessor': None, 'char': None, 'structural_weight': None, 'C': 1.0, 'lookup': False}",0.45182111811524733,0.004245048867521424,-0.0016425712923375246,1
+2,"{'word': {'ngram_range': (1, 1), 'min_df': 10, 'max_df': 1.0, 'sublinear_tf': False}, 'preprocessor': None, 'char': None, 'structural_weight': None, 'C': 1.0, 'lookup': False}",0.4487358106761805,0.004035180780200107,-0.004727878731404345,0
+3,"{'word': {'ngram_range': (1, 2), 'min_df': 1, 'max_df': 1.0, 'sublinear_tf': False}, 'preprocessor': None, 'char': None, 'structural_weight': None, 'C': 1.0, 'lookup': False}",0.4583909200223243,0.003004949682010239,0.004927230614739431,5
+4,"{'word': {'ngram_range': (1, 2), 'min_df': 1, 'max_df': 1.0, 'sublinear_tf': False}, 'preprocessor': None, 'char': None, 'structural_weight': None, 'C': 0.25, 'lookup': False}",0.4554545688854435,0.0035582620048164263,-0.002936351136880788,1
+4,"{'word': {'ngram_range': (1, 2), 'min_df': 1, 'max_df': 1.0, 'sublinear_tf': False}, 'preprocessor': None, 'char': None, 'structural_weight': None, 'C': 0.5, 'lookup': False}",0.4581913079208421,0.0049637598710972975,-0.00019961210148217168,2
+4,"{'word': {'ngram_range': (1, 2), 'min_df': 1, 'max_df': 1.0, 'sublinear_tf': False}, 'preprocessor': None, 'char': None, 'structural_weight': None, 'C': 2.0, 'lookup': False}",0.45595194489521385,0.00291926534625901,-0.002438975127110443,1
