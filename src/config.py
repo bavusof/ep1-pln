@@ -69,15 +69,36 @@ TUNING_TFIDF_WEIGHTED_WORD2VEC_FILE = TUNING_RESULTS_DIR / "tfidf_weighted_word2
 TUNING_HYBRID_TFIDF_WORD2VEC_FILE = TUNING_RESULTS_DIR / "hybrid_tfidf_word2vec.csv"
 TUNING_HIERARCHICAL_TFIDF_FILE = TUNING_RESULTS_DIR / "hierarchical_tfidf.csv"
 TUNING_SENTENCE_TRANSFORMER_FILE = TUNING_RESULTS_DIR / "sentence_transformer.csv"
-TUNING_HYBRID_TFIDF_SENTENCE_TRANSFORMER_FILE = TUNING_RESULTS_DIR/ "hybrid_tfidf_sentence_transformer.csv"
+TUNING_HYBRID_TFIDF_SENTENCE_TRANSFORMER_FILE = TUNING_RESULTS_DIR / "hybrid_tfidf_sentence_transformer.csv"
 TUNING_HYBRID_TFIDF_SENTENCE_TRANSFORMER_FOLDS_FILE = TUNING_RESULTS_DIR / "hybrid_tfidf_sentence_transformer_folds_5fold.csv"
+
+# ============================================================
+# SENTENCE TRANSFORMER
+# ============================================================
 
 SENTENCE_TRANSFORMER_MODEL_NAME = "alfaneo/bertimbau-base-portuguese-sts"
 SENTENCE_TRANSFORMER_BATCH_SIZE = 16
 SENTENCE_TRANSFORMER_NORMALIZE = True
 SENTENCE_TRANSFORMER_EMBEDDINGS_FILE = RESULTS_DIR / "embeddings" / "bertimbau_base_portuguese_sts.npy"
 
+# ============================================================
+# TOKEN-LEVEL TF-IDF-WEIGHTED BERT
+# ============================================================
+
+TOKEN_WEIGHTED_BERT_BATCH_SIZE = 16
+TOKEN_WEIGHTED_BERT_LENGTHS = [256, 512]
+TUNING_TOKEN_WEIGHTED_BERT_FILE = TUNING_RESULTS_DIR / "token_weighted_bert.csv"
+TUNING_TOKEN_WEIGHTED_BERT_FOLDS_FILE = TUNING_RESULTS_DIR / "token_weighted_bert_folds_5fold.csv"
+
+# ============================================================
+# RESUMO E MODELO ATUAL
+# ============================================================
+
 EXPERIMENTS_SUMMARY_FILE = SUMMARY_RESULTS_DIR / "experiments.csv"
 CURRENT_MODEL_FILE = SUMMARY_RESULTS_DIR / "current_model.json"
+
+# ============================================================
+# ERROR ANALYSIS
+# ============================================================
 
 ERROR_ANALYSIS_DIR = RESULTS_DIR / "error_analysis"
