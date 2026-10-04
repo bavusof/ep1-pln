@@ -1,0 +1,28 @@
+{
+  "experiment_id": "ensemble_tfidf_sentence_transformer",
+  "status": "final_submission",
+  "model": "Ensemble TF-IDF + Sentence Transformer",
+  "evaluation": "3fold_selection_plus_5fold_confirmation",
+
+  "accuracy_5fold": 0.4625227035691962,
+  "f1_macro_5fold": 0.4611301019190227,
+
+  "tfidf": {
+    "ngram_range": [1, 2],
+    "min_df": 1,
+    "max_df": 1.0,
+    "sublinear_tf": true,
+    "C": 1.0
+  },
+
+  "hybrid": {
+    "C": 0.5,
+    "sentence_transformer": "alfaneo/bertimbau-base-portuguese-sts",
+    "embedding_scale": 0.1
+  },
+
+  "ensemble": {
+    "tfidf_probability_weight": 0.2,
+    "hybrid_probability_weight": 0.8
+  }
+}
