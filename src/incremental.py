@@ -14,16 +14,26 @@ from typing import Any, Mapping
 
 import numpy as np
 import pandas as pd
+from itertools import product
 from joblib import Parallel, delayed
 from sklearn.base import clone
+from sklearn.calibration import CalibratedClassifierCV
+from sklearn.feature_selection import SelectPercentile, chi2
 from sklearn.metrics import accuracy_score, confusion_matrix, f1_score
 from sklearn.model_selection import StratifiedGroupKFold, StratifiedKFold, train_test_split
+from sklearn.naive_bayes import ComplementNB
 from sklearn.pipeline import FeatureUnion, Pipeline
 from sklearn.preprocessing import StandardScaler
+from sklearn.svm import LinearSVC
 
 from src.config import CLASSES, N_SPLITS, RANDOM_STATE, RESULTS_DIR, TEST_SIZE
 from src.features import TextStructuralFeatures
-from src.models import criar_regressao_logistica, criar_tfidf_caracteres, criar_tfidf_word
+from src.models import (
+    OrdinalClarityClassifier,
+    criar_regressao_logistica,
+    criar_tfidf_caracteres,
+    criar_tfidf_word,
+)
 from src.text_preprocessing import normalizar_urls_numeros
 
 
@@ -49,11 +59,18 @@ CONFIG_INICIAL = {
     "char": None,
     "structural_weight": None,
     "C": 1.0,
+    "class_weight": None,
+    "selection_percentile": None,
     "lookup": False,
 }
 
 
-def construir_pipeline(config: Mapping[str, Any]) -> Pipeline:
+def construir_features(config: Mapping[str, Any]) -> FeatureUnion:
+    """Monta apenas a representação de atributos (sem o classificador).
+
+    Reutilizado pelo pipeline padrão, pelos membros do ensemble clássico e
+    pela decomposição ordinal, garantindo a mesma representação em todos.
+    """
     preprocessor = PREPROCESSADORES[config["preprocessor"]]
     blocos = [
         ("word", criar_tfidf_word(**config["word"], preprocessor=preprocessor)),
@@ -69,13 +86,36 @@ def construir_pipeline(config: Mapping[str, Any]) -> Pipeline:
             )
         )
         pesos["structural"] = config["structural_weight"]
+    return FeatureUnion(blocos, transformer_weights=pesos or None)
 
-    return Pipeline(
-        [
-            ("features", FeatureUnion(blocos, transformer_weights=pesos or None)),
-            ("logistic", criar_regressao_logistica(C=config["C"])),
-        ]
+
+def construir_pipeline(config: Mapping[str, Any]) -> Pipeline:
+    etapas = [("features", construir_features(config))]
+    if config.get("selection_percentile") is not None:
+        etapas.append(("selection", SelectPercentile(chi2, percentile=config["selection_percentile"])))
+    etapas.append(("logistic", criar_regressao_logistica(C=config["C"], class_weight=config.get("class_weight"))))
+    return Pipeline(etapas)
+
+
+def construir_ordinal(config: Mapping[str, Any]) -> OrdinalClarityClassifier:
+    """Decomposição ordinal sobre a mesma representação de atributos."""
+    return OrdinalClarityClassifier(
+        construir_features(config),
+        C=config["C"],
+        class_weight=config.get("class_weight"),
     )
+
+
+def membros_ensemble_classico(config: Mapping[str, Any], *, C_svc: float = 0.25) -> dict[str, Pipeline]:
+    """LR, LinearSVC calibrado e ComplementNB sobre a mesma representação."""
+    def pipe(head):
+        return Pipeline([("features", construir_features(config)), ("clf", head)])
+
+    return {
+        "lr": pipe(criar_regressao_logistica(C=config["C"], class_weight=config.get("class_weight"))),
+        "svc": pipe(CalibratedClassifierCV(LinearSVC(C=C_svc, random_state=RANDOM_STATE), cv=3)),
+        "cnb": pipe(ComplementNB()),
+    }
 
 
 def chave_config(config: Mapping[str, Any]) -> str:
@@ -164,6 +204,87 @@ def avaliar_holdout(config, X, y) -> dict[str, Any]:
     resultado = avaliar_config(config, X, y, [(treino, validacao)], nome_cache="holdout")
     resultado["indices_validacao"] = validacao
     return resultado
+
+
+# ============================================================
+# OOF PARA ESTIMADORES ARBITRÁRIOS (ensemble clássico e ordinal)
+# ============================================================
+
+def resumir_oof(probs, fold_ids, y, n_splits, acc_treino=None) -> dict[str, Any]:
+    """Resume probabilidades out-of-fold no mesmo formato de avaliar_config."""
+    y = np.asarray(y)
+    avaliado = fold_ids >= 0
+    pred = np.array(CLASSES)[probs.argmax(1)]
+    acc_folds = np.array(
+        [accuracy_score(y[fold_ids == f], pred[fold_ids == f]) for f in range(n_splits)]
+    )
+    resumo = {
+        "probs": probs,
+        "pred": pred,
+        "fold_ids": fold_ids,
+        "acc_folds": acc_folds,
+        "accuracy": float(acc_folds.mean()),
+        "accuracy_std": float(acc_folds.std()),
+        "f1_macro": float(f1_score(y[avaliado], pred[avaliado], average="macro")),
+    }
+    if acc_treino is not None:
+        resumo["train_accuracy"] = float(np.mean(acc_treino))
+        resumo["accuracy_gap"] = float(np.mean(acc_treino) - acc_folds.mean())
+    return resumo
+
+
+def probs_oof_estimador(estimador, X, y, splits):
+    """Probabilidades out-of-fold de um estimador sklearn qualquer (com predict_proba)."""
+    X = np.asarray(X, dtype=object)
+    y = np.asarray(y)
+    saidas = Parallel(n_jobs=len(splits))(
+        delayed(_ajustar_fold)(estimador, X, y, tr, va) for tr, va in splits
+    )
+    probs = np.zeros((len(y), len(CLASSES)))
+    fold_ids = np.full(len(y), -1)
+    acc_treino = []
+    for fold, (validacao, p, acc) in enumerate(saidas):
+        probs[validacao] = p
+        fold_ids[validacao] = fold
+        acc_treino.append(acc)
+    return probs, fold_ids, np.array(acc_treino)
+
+
+# ============================================================
+# CALIBRAÇÃO DE LIMIAR POR CLASSE (reescala as colunas de probabilidade)
+# ============================================================
+
+def _grade_simplex(k: int, passo: float = 0.05):
+    n = round(1 / passo)
+    for partes in product(range(n + 1), repeat=k - 1):
+        if sum(partes) <= n:
+            yield np.array([p / n for p in partes] + [(n - sum(partes)) / n])
+
+
+def melhor_escala(probs, y, passo: float = 0.05):
+    """Vetor de pesos por classe que maximiza a acurácia de argmax(w ⊙ p)."""
+    y = np.asarray(y)
+    melhor, melhor_acc = None, -1.0
+    for w in _grade_simplex(len(CLASSES), passo):
+        acc = float((np.array(CLASSES)[(probs * w).argmax(1)] == y).mean())
+        if acc > melhor_acc + 1e-12:
+            melhor, melhor_acc = w, acc
+    return melhor, melhor_acc
+
+
+def aplicar_escala(probs, w) -> np.ndarray:
+    return np.array(CLASSES)[(probs * w).argmax(1)]
+
+
+def escala_honesta(probs, y):
+    """Escala escolhida em metade dos dados e aplicada na outra (estimativa honesta)."""
+    y = np.asarray(y)
+    pred = np.empty(len(y), dtype=object)
+    cv = StratifiedKFold(n_splits=2, shuffle=True, random_state=RANDOM_STATE)
+    for sel, aval in cv.split(np.zeros(len(y)), y):
+        w, _ = melhor_escala(probs[sel], y[sel])
+        pred[aval] = aplicar_escala(probs[aval], w)
+    return float((pred == y).mean()), pred
 
 
 # ============================================================

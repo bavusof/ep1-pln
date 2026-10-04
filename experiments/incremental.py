@@ -18,6 +18,7 @@ from typing import Any, Callable
 import numpy as np
 import pandas as pd
 from sklearn.metrics import accuracy_score, f1_score
+from sklearn.model_selection import StratifiedKFold
 
 from src.config import CLASSES, FINETUNE_HISTORY_FILE, FINETUNE_HOLDOUT_PROBS_FILE, RANDOM_STATE
 from src.data import carregar_dados_treino
@@ -25,11 +26,18 @@ from src.ensemble import aplicar_lookup, combinar, melhores_pesos, tabela_lookup
 from src.incremental import (
     CONFIG_INICIAL,
     INCREMENTAL_DIR,
+    aplicar_escala,
     avaliar_config,
     avaliar_holdout,
+    construir_ordinal,
     diagnosticar,
+    escala_honesta,
     indices_holdout,
     matriz_confusao,
+    melhor_escala,
+    membros_ensemble_classico,
+    probs_oof_estimador,
+    resumir_oof,
     splits_agrupados,
     splits_padrao,
 )
@@ -226,6 +234,10 @@ def main() -> None:
         if linha["mantido"]:
             config, melhor = candidato, r
 
+    # Melhor configuração clássica (após o loop 1-7); base da fase 2 (degraus 10-13).
+    config_fase2 = copy.deepcopy(config)
+    melhor_fase2 = melhor
+
     # ---------- Degrau 8: lookup de textos repetidos (exige CV padrão) ----------
     if args.ate >= 8:
         sem = avaliar_config(config, X_arr, y_arr, padrao, nome_cache="padrao")
@@ -291,6 +303,125 @@ def main() -> None:
         print(f"Holdout: clássico={acc_classico:.4f} | BERT sozinho={acc_bert:.4f} | ensemble={acc_ens:.4f}")
         print(f"Pesos por metade: {pesos_metades} | pesos finais: {pesos_finais}")
         registrar({**linha, "train_accuracy": None, "accuracy_gap": None, "folds_vencidos": None}, {"pesos": pesos_finais})
+
+    # ============================================================
+    # FASE 2: melhorias dirigidas pelo diagnóstico (sobre o melhor clássico)
+    # ============================================================
+    config = copy.deepcopy(config_fase2)
+    melhor = melhor_fase2
+
+    # ---------- Degrau 10: class_weight + calibração de limiar ----------
+    if args.ate >= 10:
+        candidatos_cw = [
+            _com(config, class_weight="balanced"),
+            _com(config, class_weight={"c1": 1.0, "c234": 1.3, "c5": 1.0}),
+            _com(config, class_weight={"c1": 1.1, "c234": 1.5, "c5": 0.9}),
+        ]
+        resultados = [(c, avaliar_config(c, X_arr, y_arr, agrupados, nome_cache="agrupado")) for c in candidatos_cw]
+        for c, r in resultados:
+            candidatos.append({"degrau": "10", "config": str(c["class_weight"]), "accuracy": r["accuracy"],
+                               "accuracy_std": r["accuracy_std"], "delta": r["accuracy"] - melhor["accuracy"],
+                               "folds_vencidos": int((r["acc_folds"] > melhor["acc_folds"]).sum())})
+        cand, r = max(resultados, key=lambda item: item[1]["accuracy"])
+        # Calibração honesta de limiar por classe sobre as probs OOF do melhor candidato.
+        acc_calibrado, pred_calibrado = escala_honesta(r["probs"], y_arr)
+        melhor_pred = pred_calibrado if acc_calibrado > r["accuracy"] else r["pred"]
+        acc_degrau = max(acc_calibrado, r["accuracy"])
+        holdout = avaliar_holdout(cand, X_arr, y_arr)["accuracy"]
+        linha = resumo_linha("10", "class_weight + calibração de limiar",
+                             "Rebalancear a decisão reduz o viés pró-c5 e eleva o recall de c234?",
+                             r, melhor, holdout, "5-fold agrupado por texto")
+        linha["accuracy"] = acc_degrau
+        linha["delta"] = acc_degrau - melhor["accuracy"]
+        linha["folds_vencidos"] = int((r["acc_folds"] > melhor["acc_folds"]).sum())
+        linha["mantido"] = bool(linha["delta"] > 0 and linha["folds_vencidos"] >= FOLDS_PARA_MANTER)
+        linhas.append(linha)
+        diag = salvar_diagnostico("10", X_arr, y_arr, melhor_pred)
+        imprimir_degrau(linha, diag, {"class_weight": cand["class_weight"]})
+        print(f"class_weight escolhido: {cand['class_weight']} | argmax={r['accuracy']:.4f} | "
+              f"com calibração de limiar (honesta)={acc_calibrado:.4f}")
+        registrar(linha, {**cand, "limiar_calibrado": bool(acc_calibrado > r["accuracy"])})
+        if linha["mantido"]:
+            config, melhor = cand, r
+
+    # ---------- Degrau 11: ensemble clássico (LR + LinearSVC + ComplementNB) ----------
+    if args.ate >= 11:
+        membros = membros_ensemble_classico(config)
+        probs_membros, fold_ids = {}, None
+        acc_individual = {}
+        for nome, estimador in membros.items():
+            p, fold_ids, _ = probs_oof_estimador(estimador, X_arr, y_arr, agrupados)
+            probs_membros[nome] = p
+            acc_individual[nome] = float((np.array(CLASSES)[p.argmax(1)] == y_arr).mean())
+
+        # Voto de peso igual (sem ajuste -> honesto).
+        prob_media = sum(probs_membros.values()) / len(probs_membros)
+        voto = resumir_oof(prob_media, fold_ids, y_arr, len(agrupados))
+
+        # Pesos ajustados de forma honesta: escolhidos em metade e aplicados na outra.
+        pred_honesto = np.empty(len(y_arr), dtype=object)
+        cv2 = StratifiedKFold(n_splits=2, shuffle=True, random_state=RANDOM_STATE)
+        for sel, aval in cv2.split(np.zeros(len(y_arr)), y_arr):
+            pesos, _ = melhores_pesos({k: v[sel] for k, v in probs_membros.items()}, y_arr[sel], passo=0.1)
+            pred_honesto[aval] = np.array(CLASSES)[combinar({k: v[aval] for k, v in probs_membros.items()}, pesos).argmax(1)]
+        acc_pesos = float((pred_honesto.astype(str) == y_arr).mean())
+
+        usar_pesos = acc_pesos > voto["accuracy"]
+        pred_ens = pred_honesto.astype(str) if usar_pesos else voto["pred"]
+        acc_ens = max(acc_pesos, voto["accuracy"])
+        linha = {"degrau": "11", "mudanca": "ensemble clássico (LR+LinearSVC+ComplementNB)",
+                 "hipotese": "Combinar classificadores sobre o mesmo TF-IDF reduz o erro?",
+                 "protocolo": "5-fold agrupado por texto", "accuracy": acc_ens, "accuracy_std": None,
+                 "f1_macro": float(f1_score(y_arr, pred_ens, average="macro")),
+                 "delta": acc_ens - melhor["accuracy"], "holdout_accuracy": None,
+                 "mantido": acc_ens > melhor["accuracy"]}
+        linhas.append(linha)
+        diag = salvar_diagnostico("11", X_arr, y_arr, pred_ens)
+        imprimir_degrau(linha, diag)
+        resumo_membros = ", ".join(f"{k}={v:.4f}" for k, v in acc_individual.items())
+        print(f"Membros (OOF): {resumo_membros} | voto igual={voto['accuracy']:.4f} | pesos honestos={acc_pesos:.4f}")
+        registrar({**linha, "train_accuracy": None, "accuracy_gap": None, "folds_vencidos": None},
+                  {"membros": list(membros), "voto": "pesos" if usar_pesos else "igual"})
+
+    # ---------- Degrau 12: decomposição ordinal ----------
+    if args.ate >= 12:
+        ordinal = construir_ordinal(config)
+        probs_ord, fold_ids, acc_treino = probs_oof_estimador(ordinal, X_arr, y_arr, agrupados)
+        r = resumir_oof(probs_ord, fold_ids, y_arr, len(agrupados), acc_treino)
+        holdout_treino, holdout_val = indices_holdout(y_arr)
+        ordinal_ho = construir_ordinal(config).fit(X_arr[holdout_treino], y_arr[holdout_treino])
+        ordem_ho = [list(ordinal_ho.classes_).index(c) for c in CLASSES]
+        pred_ho = np.array(CLASSES)[ordinal_ho.predict_proba(X_arr[holdout_val])[:, ordem_ho].argmax(1)]
+        linha = resumo_linha("12", "decomposição ordinal (c1<c234<c5)",
+                             "Respeitar a ordem das classes separa melhor os extremos?",
+                             r, melhor, float(accuracy_score(y_arr[holdout_val], pred_ho)), "5-fold agrupado por texto")
+        linha["mantido"] = bool(linha["delta"] > 0 and linha["folds_vencidos"] >= FOLDS_PARA_MANTER)
+        linhas.append(linha)
+        diag = salvar_diagnostico("12", X_arr, y_arr, r["pred"])
+        imprimir_degrau(linha, diag, {"ordinal": True, "C": config["C"], "class_weight": config.get("class_weight")})
+        registrar(linha, {**config, "ordinal": True})
+
+    # ---------- Degrau 13: seleção de atributos (chi2) ----------
+    if args.ate >= 13:
+        candidatos_sel = [_com(config, selection_percentile=p) for p in (20, 40, 60, 80)]
+        resultados = [(c, avaliar_config(c, X_arr, y_arr, agrupados, nome_cache="agrupado")) for c in candidatos_sel]
+        for c, rr in resultados:
+            candidatos.append({"degrau": "13", "config": f"pct={c['selection_percentile']}", "accuracy": rr["accuracy"],
+                               "accuracy_std": rr["accuracy_std"], "delta": rr["accuracy"] - melhor["accuracy"],
+                               "folds_vencidos": int((rr["acc_folds"] > melhor["acc_folds"]).sum())})
+        cand, r = max(resultados, key=lambda item: item[1]["accuracy"])
+        holdout = avaliar_holdout(cand, X_arr, y_arr)["accuracy"]
+        linha = resumo_linha("13", "seleção de atributos (chi2)",
+                             "Cortar atributos reduz o overfitting (gap) sem perder acurácia?",
+                             r, melhor, holdout, "5-fold agrupado por texto")
+        linha["mantido"] = bool(linha["delta"] > 0 and linha["folds_vencidos"] >= FOLDS_PARA_MANTER)
+        linhas.append(linha)
+        diag = salvar_diagnostico("13", X_arr, y_arr, r["pred"])
+        imprimir_degrau(linha, diag, {"selection_percentile": cand["selection_percentile"]})
+        print(f"percentil escolhido: {cand['selection_percentile']}")
+        registrar(linha, cand)
+        if linha["mantido"]:
+            config, melhor = cand, r
 
     salvar_tabela(pd.DataFrame(linhas), INCREMENTAL_DIR / "degraus.csv")
     salvar_tabela(pd.DataFrame(candidatos), INCREMENTAL_DIR / "candidatos.csv")
