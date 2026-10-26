@@ -11,6 +11,7 @@ from src.config import (
     CLASSES,
     N_SPLITS,
     N_SPLITS_EXPLORATORIA,
+    N_SPLITS_ENSEMBLE_CONFIRMATION,
     RANDOM_STATE,
     SENTENCE_TRANSFORMER_BATCH_SIZE,
     SENTENCE_TRANSFORMER_EMBEDDINGS_FILE,
@@ -412,7 +413,7 @@ def main():
     )
 
     # ========================================================
-    # CONFIRMAÇÃO - 5 FOLD
+    # CONFIRMAÇÃO - 10 FOLD
     # ========================================================
 
     confirmacao = avaliar_blend(
@@ -420,11 +421,11 @@ def main():
         y,
         embeddings,
         melhor_weight,
-        N_SPLITS,
+        N_SPLITS_ENSEMBLE_CONFIRMATION,
     )
 
     print("\n==============================")
-    print("CONFIRMAÇÃO - 5 FOLD")
+    print("CONFIRMAÇÃO - 10 FOLD")
     print("==============================")
 
     print(

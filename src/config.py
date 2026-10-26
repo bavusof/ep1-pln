@@ -43,6 +43,9 @@ TEST_SIZE = 0.20
 N_SPLITS = 5
 N_SPLITS_EXPLORATORIA = 3
 
+# EP2: confirmação do ensemble com 10 folds
+N_SPLITS_ENSEMBLE_CONFIRMATION = 10
+
 
 # Critério usado pelo GridSearchCV para selecionar a configuração.
 METRICA_SELECAO = "accuracy"
