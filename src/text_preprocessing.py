@@ -192,3 +192,39 @@ def normalizar_urls_numeros(texto: str) -> str:
     )
 
     return texto.strip()
+
+# ============================================================
+# LIMPEZA COMPLETA (TF-IDF E TRANSFORMERS)
+# ============================================================
+
+# Atenção: quando um `preprocessor` é passado ao TfidfVectorizer, ele
+# substitui o pré-processamento padrão, inclusive o lowercase. Toda função
+# usada como preprocessor do TF-IDF precisa aplicar .lower() por conta própria.
+
+PADROES_MASCARA = [
+    (re.compile(r"(https?://|www\.)\S+", re.IGNORECASE), " URLTOKEN "),
+    (re.compile(r"[\w.+-]+@[\w-]+\.[\w.]+"), " EMAILTOKEN "),
+    (re.compile(r"\b\d{1,2}/\d{1,2}/\d{2,4}\b"), " DATATOKEN "),
+    (re.compile(r"\(?\b\d{2}\)?\s?\d{4,5}-?\d{4}\b"), " TELEFONETOKEN "),
+    (re.compile(r"\b\d+(?:[./-]\d+)*\b"), " NUMTOKEN "),
+]
+
+
+def limpar_texto(texto: str, *, lowercase: bool = True, mascarar: bool = True) -> str:
+    """Limpeza completa: cp1252, controle e espaços (normalizar_texto),
+    máscaras de URL/e-mail/data/telefone/número e lowercase opcional
+    (desligado para modelos cased, como o BERTimbau)."""
+    texto = normalizar_texto(texto)
+    if mascarar:
+        for padrao, token in PADROES_MASCARA:
+            texto = padrao.sub(token, texto)
+        texto = re.sub(r"\s+", " ", texto).strip()
+    return texto.lower() if lowercase else texto
+
+
+def limpar_para_tfidf(texto: str) -> str:
+    return limpar_texto(texto, lowercase=True)
+
+
+def limpar_para_bert(texto: str) -> str:
+    return limpar_texto(texto, lowercase=False)

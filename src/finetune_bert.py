@@ -153,6 +153,7 @@ def treinar_bert(
     head_tokens: int = 128,
     epochs: int = 3,
     batch_size: int = 16,
+    grad_accum: int = 1,
     learning_rate: float = 2e-5,
     weight_decay: float = 0.01,
     warmup_ratio: float = 0.1,
@@ -200,7 +201,7 @@ def treinar_bert(
         },
     ]
     optimizer = torch.optim.AdamW(grupos, lr=learning_rate)
-    total_steps = epochs * len(loader)
+    total_steps = epochs * math.ceil(len(loader) / grad_accum)
     scheduler = get_linear_schedule_with_warmup(
         optimizer,
         num_warmup_steps=math.ceil(warmup_ratio * total_steps),
@@ -218,11 +219,12 @@ def treinar_bert(
         for passo, batch in enumerate(loader, start=1):
             batch = {k: v.to(device) for k, v in batch.items()}
             saida = model(**batch)
-            saida.loss.backward()
-            torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
-            optimizer.step()
-            scheduler.step()
-            optimizer.zero_grad(set_to_none=True)
+            (saida.loss / grad_accum).backward()
+            if passo % grad_accum == 0 or passo == len(loader):
+                torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+                optimizer.step()
+                scheduler.step()
+                optimizer.zero_grad(set_to_none=True)
 
             perda_acumulada += saida.loss.item() * len(batch["labels"])
             acertos += (saida.logits.argmax(-1) == batch["labels"]).sum().item()

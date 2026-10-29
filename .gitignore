@@ -219,6 +219,7 @@ __marimo__/
 
 # Projeto
 ep1-enunciado.pdf
+ep2-enunciado.pdf
 .idea/
 results/embeddings/
 results/finetune/
@@ -227,3 +228,5 @@ data/test*.xlsx
 logs/
 results/submission/test_fake*
 results/incremental/cache/
+.DS_Store
+results/oof/*_fold*.npz
