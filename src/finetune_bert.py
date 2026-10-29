@@ -173,6 +173,8 @@ def treinar_bert(
         num_labels=len(CLASSES),
         id2label=ID2LABEL,
         label2id=LABEL2ID,
+        # Alguns checkpoints (ex.: Albertina) vêm em bfloat16; o treino é em float32.
+        dtype=torch.float32,
     ).to(device)
 
     sequencias = tokenizar_head_tail(
