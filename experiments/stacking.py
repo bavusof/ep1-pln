@@ -141,6 +141,9 @@ def main() -> None:
     STACKING_CONFIG_FILE.write_text(json.dumps(config, indent=2, ensure_ascii=False), encoding="utf-8")
     salvar_tabela(tabela, EP2_RESULTS_DIR / "stacking_cv.csv")
     salvar_tabela(tabela_lookup, EP2_RESULTS_DIR / "lookup_loo.csv")
+    # Predições OOF da estratégia escolhida (sem lookup), para a análise de erros.
+    salvar_tabela(pd.DataFrame({"fold": fold_ids, "y_true": y_arr, "y_pred": pred_vencedora}),
+                  EP2_RESULTS_DIR / "stacking_oof_pred.csv")
     print(f"\nEscolhida: {vencedora} | lookup: {config['lookup']} | config salva em {STACKING_CONFIG_FILE}")
 
     registrar_experimento(
