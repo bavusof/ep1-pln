@@ -45,6 +45,9 @@ def main() -> None:
     parser.add_argument("--max-length", type=int, default=FINETUNE_PARAMS["max_length"])
     parser.add_argument("--head-tokens", type=int, default=FINETUNE_PARAMS["head_tokens"])
     parser.add_argument("--amostra", type=int, default=None, help="usa só N linhas (teste rápido)")
+    parser.add_argument("--perda", choices=["ce", "sord"], default="ce")
+    parser.add_argument("--alpha-sord", type=float, default=2.0)
+    parser.add_argument("--seed", type=int, default=42)
     args = parser.parse_args()
 
     X, y = carregar_dados_treino()
@@ -69,6 +72,9 @@ def main() -> None:
         "learning_rate": args.lr,
         "weight_decay": FINETUNE_PARAMS["weight_decay"],
         "warmup_ratio": FINETUNE_PARAMS["warmup_ratio"],
+        "perda": args.perda,
+        "alpha_sord": args.alpha_sord,
+        "seed": args.seed,
     }
     print(f"Modelo: {args.model} | tag: {tag} | device: {selecionar_device()} | params: {params}")
 

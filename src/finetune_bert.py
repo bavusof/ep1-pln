@@ -144,6 +144,17 @@ def prever_probabilidades(
     return probs
 
 
+def alvos_sord(alpha: float) -> torch.Tensor:
+    """Alvos suaves ordinais (SORD; Díaz & Marathe, 2019).
+
+    Linha i = distribuição-alvo da classe i: q_j ∝ exp(-alpha * |i - j|),
+    com a ordem c1 < c234 < c5 dada por CLASSES.
+    """
+    posicoes = torch.arange(len(CLASSES), dtype=torch.float32)
+    distancia = (posicoes[:, None] - posicoes[None, :]).abs()
+    return torch.softmax(-alpha * distancia, dim=1)
+
+
 def treinar_bert(
     textos_treino: Sequence[str],
     y_treino: Sequence[str],
@@ -161,8 +172,16 @@ def treinar_bert(
     y_validacao: Sequence[str] | None = None,
     seed: int = RANDOM_STATE,
     log_every: int = 100,
+    perda: str = "ce",
+    alpha_sord: float = 2.0,
 ):
-    """Faz fine-tuning e retorna (model, tokenizer, historico, probs_val_por_epoca)."""
+    """Faz fine-tuning e retorna (model, tokenizer, historico, probs_val_por_epoca).
+
+    perda="ce": entropia cruzada padrão (one-hot).
+    perda="sord": entropia cruzada contra alvos suaves ordinais (ver alvos_sord).
+    """
+    if perda not in {"ce", "sord"}:
+        raise ValueError(f"perda desconhecida: {perda}")
     fixar_sementes(seed)
     device = selecionar_device()
     print(f"Device: {device}")
@@ -210,6 +229,8 @@ def treinar_bert(
         num_training_steps=total_steps,
     )
 
+    matriz_sord = alvos_sord(alpha_sord).to(device) if perda == "sord" else None
+
     historico = []
     probs_val_por_epoca = []
     for epoca in range(1, epochs + 1):
@@ -220,15 +241,21 @@ def treinar_bert(
         vistos = 0
         for passo, batch in enumerate(loader, start=1):
             batch = {k: v.to(device) for k, v in batch.items()}
-            saida = model(**batch)
-            (saida.loss / grad_accum).backward()
+            if matriz_sord is None:
+                saida = model(**batch)
+                loss = saida.loss
+            else:
+                saida = model(input_ids=batch["input_ids"], attention_mask=batch["attention_mask"])
+                log_probs = torch.log_softmax(saida.logits, dim=-1)
+                loss = -(matriz_sord[batch["labels"]] * log_probs).sum(dim=-1).mean()
+            (loss / grad_accum).backward()
             if passo % grad_accum == 0 or passo == len(loader):
                 torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
                 optimizer.step()
                 scheduler.step()
                 optimizer.zero_grad(set_to_none=True)
 
-            perda_acumulada += saida.loss.item() * len(batch["labels"])
+            perda_acumulada += loss.item() * len(batch["labels"])
             acertos += (saida.logits.argmax(-1) == batch["labels"]).sum().item()
             vistos += len(batch["labels"])
             if passo % log_every == 0:
