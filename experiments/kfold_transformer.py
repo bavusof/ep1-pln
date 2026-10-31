@@ -24,6 +24,7 @@ from src.finetune_bert import prever_probabilidades, selecionar_device, treinar_
 from src.oof import acuracia_por_fold, arquivo_fold, carregar_textos_teste, consolidar, folds_ep2, salvar_fold
 from src.results import registrar_experimento
 from src.text_preprocessing import limpar_para_bert
+from src.tratamento_dados import tratar_treino
 
 
 def liberar_memoria() -> None:
@@ -48,6 +49,8 @@ def main() -> None:
     parser.add_argument("--perda", choices=["ce", "sord"], default="ce")
     parser.add_argument("--alpha-sord", type=float, default=2.0)
     parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--treino-limpo", action="store_true",
+                        help="aplica src/tratamento_dados.py à parte de treino de cada fold")
     args = parser.parse_args()
 
     X, y = carregar_dados_treino()
@@ -83,9 +86,14 @@ def main() -> None:
             print(f"Fold {fold}: já concluído, pulando.")
             continue
         print(f"\n===== Fold {fold + 1}/{len(splits)} (treino={len(treino)}, validação={len(validacao)}) =====", flush=True)
+        textos_treino, rotulos_treino = X_limpo[treino], y_arr[treino]
+        if args.treino_limpo:
+            originais, rotulos_treino, relatorio = tratar_treino(X.to_numpy(dtype=object)[treino], y_arr[treino])
+            textos_treino = np.array([limpar_para_bert(t) for t in originais], dtype=object)
+            print(f"Treino limpo: {relatorio}", flush=True)
         model, tokenizer, historico, probs_por_epoca = treinar_bert(
-            X_limpo[treino].tolist(),
-            y_arr[treino].tolist(),
+            textos_treino.tolist(),
+            rotulos_treino.tolist(),
             model_name=args.model,
             textos_validacao=X_limpo[validacao].tolist(),
             y_validacao=y_arr[validacao].tolist(),
@@ -126,7 +134,7 @@ def main() -> None:
                 "accuracy": float(acc_folds.mean()),
                 "accuracy_std": float(acc_folds.std()),
                 "f1_macro": float(f1_score(y_arr, pred, average="macro")),
-                "parameters": params,
+                "parameters": {**params, "treino_limpo": args.treino_limpo},
                 "notes": "Época final fixa; previsões de teste = média dos 5 modelos dos folds.",
             }
         )

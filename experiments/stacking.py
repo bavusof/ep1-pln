@@ -12,6 +12,7 @@ A estratégia vencedora é reajustada em todo o OOF e salva para o
 `experiments/predict_ep2.py`.
 
     python -m experiments.stacking [base1 base2 ...]
+    python -m experiments.stacking --nao-salvar base1 base2 ...   # exploratório: não altera o modelo final
 """
 
 import json
@@ -59,7 +60,9 @@ def escolher_C(Z, y, grupos) -> float:
 
 
 def main() -> None:
-    nomes = sys.argv[1:] or bases_disponiveis()
+    argumentos = sys.argv[1:]
+    salvar = "--nao-salvar" not in argumentos
+    nomes = [a for a in argumentos if a != "--nao-salvar"] or bases_disponiveis()
     X, y = carregar_dados_treino()
     X_arr, y_arr = X.to_numpy(dtype=object), y.to_numpy()
     grupos = grupos_por_texto(X_arr)
@@ -117,6 +120,10 @@ def main() -> None:
     print(tabela_lookup.to_string(index=False))
     melhor_regra = tabela_lookup.sort_values("delta", ascending=False).iloc[0]
     usar_lookup = bool(melhor_regra["delta"] > 0)
+
+    if not salvar:
+        print(f"\n[--nao-salvar] Melhor estratégia: {vencedora}; modelo final não alterado.")
+        return
 
     # ---------- Ajuste final em todo o OOF ----------
     config = {"bases": nomes, "estrategia": vencedora,

@@ -35,6 +35,7 @@ from src.incremental import CONFIG_INICIAL, construir_pipeline
 from src.oof import acuracia_por_fold, carregar_textos_teste, consolidar, folds_ep2, salvar_fold
 from src.results import registrar_experimento
 from src.sentence_embeddings import carregar_ou_gerar_embeddings
+from src.tratamento_dados import tratar_treino
 
 
 # Degrau 6 da escada incremental (melhor clássico: 0,4619 no CV agrupado).
@@ -47,8 +48,11 @@ def _ordenar(modelo, probs):
     return probs[:, [list(modelo.classes_).index(c) for c in CLASSES]]
 
 
-def _fold_tfidf(X, y, treino, validacao, testes):
-    modelo = construir_pipeline(CONFIG_TFIDF).fit(X[treino], y[treino])
+def _fold_tfidf(X, y, treino, validacao, testes, limpo=False):
+    X_tr, y_tr = X[treino], y[treino]
+    if limpo:
+        X_tr, y_tr, _ = tratar_treino(X_tr, y_tr)
+    modelo = construir_pipeline(CONFIG_TFIDF).fit(X_tr, y_tr)
     prever = lambda textos: _ordenar(modelo, modelo.predict_proba(textos))
     return validacao, prever(X[validacao]), prever(testes["test1"]), prever(testes["test2"])
 
@@ -96,8 +100,9 @@ def _fold_ep1(X, y, emb, treino, validacao, testes, emb_testes):
 def executar(tag, X, y, splits, testes) -> None:
     X_arr, y_arr = X.to_numpy(dtype=object), y.to_numpy()
     testes_arr = {k: v.to_numpy(dtype=object) for k, v in testes.items()}
-    if tag == "tfidf":
-        tarefas = [delayed(_fold_tfidf)(X_arr, y_arr, tr, va, testes_arr) for tr, va in splits]
+    if tag in ("tfidf", "tfidf_limpo"):
+        limpo = tag == "tfidf_limpo"
+        tarefas = [delayed(_fold_tfidf)(X_arr, y_arr, tr, va, testes_arr, limpo) for tr, va in splits]
     else:
         emb = embeddings(X, "train")
         emb_testes = {k: embeddings(v, k) for k, v in testes.items()}
@@ -116,14 +121,15 @@ def executar(tag, X, y, splits, testes) -> None:
             "experiment_id": f"ep2_oof_{tag}",
             "experiment_name": f"EP2 base {tag} (5-fold OOF)",
             "category": "ep2_base",
-            "representation": "TF-IDF + estruturais" if tag == "tfidf" else "TF-IDF + Sentence-BERT (EP1)",
-            "model": "Regressão Logística" if tag == "tfidf" else "Ensemble do EP1",
+            "representation": "TF-IDF + estruturais" if tag.startswith("tfidf") else "TF-IDF + Sentence-BERT (EP1)",
+            "model": "Regressão Logística" if tag.startswith("tfidf") else "Ensemble do EP1",
             "evaluation": "5-fold StratifiedGroupKFold por texto (OOF)",
             "folds": N_SPLITS,
             "accuracy": float(acc.mean()),
             "accuracy_std": float(acc.std()),
             "f1_macro": float(f1_score(y_arr, pred, average="macro")),
-            "notes": "Previsões de teste = média dos 5 modelos dos folds.",
+            "notes": "Previsões de teste = média dos 5 modelos dos folds."
+                     + (" Treino de cada fold tratado (src/tratamento_dados.py)." if tag.endswith("_limpo") else ""),
         }
     )
 
