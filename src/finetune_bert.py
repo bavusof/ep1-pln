@@ -50,7 +50,13 @@ def tokenizar_head_tail(
     Respostas longas costumam ter a informação principal no início e a
     conclusão/encaminhamento no fim, então o trecho central é descartado.
     """
-    corpo = max_length - 2
+    # Encoders (BERT) usam [CLS] ... [SEP]; decoders (Llama/Tucano) não têm
+    # CLS/SEP: começam com <s> (BOS) e classificam pelo último token real.
+    inicio = tokenizer.cls_token_id if tokenizer.cls_token_id is not None else tokenizer.bos_token_id
+    fim = tokenizer.sep_token_id
+    prefixo = [inicio] if inicio is not None else []
+    sufixo = [fim] if fim is not None else []
+    corpo = max_length - len(prefixo) - len(sufixo)
     tail_tokens = corpo - head_tokens
     codificados = tokenizer(
         list(textos),
@@ -63,9 +69,7 @@ def tokenizar_head_tail(
     for ids in codificados:
         if len(ids) > corpo:
             ids = ids[:head_tokens] + (ids[-tail_tokens:] if tail_tokens > 0 else [])
-        sequencias.append(
-            [tokenizer.cls_token_id] + ids + [tokenizer.sep_token_id]
-        )
+        sequencias.append(prefixo + ids + sufixo)
     return sequencias
 
 
@@ -174,11 +178,14 @@ def treinar_bert(
     log_every: int = 100,
     perda: str = "ce",
     alpha_sord: float = 2.0,
+    lora: dict | None = None,
 ):
     """Faz fine-tuning e retorna (model, tokenizer, historico, probs_val_por_epoca).
 
     perda="ce": entropia cruzada padrão (one-hot).
     perda="sord": entropia cruzada contra alvos suaves ordinais (ver alvos_sord).
+    lora={"r": 16, "alpha": 32, "dropout": 0.05}: congela o modelo e treina só
+    adaptadores LoRA + cabeça de classificação (usado nos LLMs).
     """
     if perda not in {"ce", "sord"}:
         raise ValueError(f"perda desconhecida: {perda}")
@@ -194,7 +201,25 @@ def treinar_bert(
         label2id=LABEL2ID,
         # Alguns checkpoints (ex.: Albertina) vêm em bfloat16; o treino é em float32.
         dtype=torch.float32,
-    ).to(device)
+    )
+    if tokenizer.pad_token_id is None:
+        tokenizer.pad_token = tokenizer.eos_token
+    model.config.pad_token_id = tokenizer.pad_token_id
+    if lora is not None:
+        from peft import LoraConfig, get_peft_model
+
+        model = get_peft_model(
+            model,
+            LoraConfig(
+                task_type="SEQ_CLS",
+                r=lora.get("r", 16),
+                lora_alpha=lora.get("alpha", 32),
+                lora_dropout=lora.get("dropout", 0.05),
+                target_modules=["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"],
+            ),
+        )
+        model.print_trainable_parameters()
+    model = model.to(device)
 
     sequencias = tokenizar_head_tail(
         tokenizer, textos_treino, max_length=max_length, head_tokens=head_tokens
@@ -213,11 +238,11 @@ def treinar_bert(
     sem_decay = ("bias", "LayerNorm.weight")
     grupos = [
         {
-            "params": [p for n, p in model.named_parameters() if not any(s in n for s in sem_decay)],
+            "params": [p for n, p in model.named_parameters() if p.requires_grad and not any(s in n for s in sem_decay)],
             "weight_decay": weight_decay,
         },
         {
-            "params": [p for n, p in model.named_parameters() if any(s in n for s in sem_decay)],
+            "params": [p for n, p in model.named_parameters() if p.requires_grad and any(s in n for s in sem_decay)],
             "weight_decay": 0.0,
         },
     ]

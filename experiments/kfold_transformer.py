@@ -49,6 +49,9 @@ def main() -> None:
     parser.add_argument("--perda", choices=["ce", "sord"], default="ce")
     parser.add_argument("--alpha-sord", type=float, default=2.0)
     parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--lora", action="store_true", help="treina só adaptadores LoRA (LLMs)")
+    parser.add_argument("--lora-r", type=int, default=16)
+    parser.add_argument("--lora-alpha", type=int, default=32)
     parser.add_argument("--treino-limpo", action="store_true",
                         help="aplica src/tratamento_dados.py à parte de treino de cada fold")
     args = parser.parse_args()
@@ -78,6 +81,7 @@ def main() -> None:
         "perda": args.perda,
         "alpha_sord": args.alpha_sord,
         "seed": args.seed,
+        "lora": {"r": args.lora_r, "alpha": args.lora_alpha, "dropout": 0.05} if args.lora else None,
     }
     print(f"Modelo: {args.model} | tag: {tag} | device: {selecionar_device()} | params: {params}")
 
