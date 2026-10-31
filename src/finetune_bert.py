@@ -208,6 +208,12 @@ def treinar_bert(
     if lora is not None:
         from peft import LoraConfig, get_peft_model
 
+        if lora.get("gradient_checkpointing", True):
+            # Recalcula as ativações no backward em vez de guardá-las: sem isso o
+            # Tucano-1b1 estoura os 24 GB e cai em swap (~46 s/passo -> ~1 s/passo).
+            model.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": False})
+            model.enable_input_require_grads()
+
         model = get_peft_model(
             model,
             LoraConfig(
