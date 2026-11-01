@@ -687,3 +687,91 @@ Para reproduzir especificamente a solução utilizada na entrega, utilize:
 ```bash
 python -m experiments.predict_test
 ```
+
+---
+
+# EP2 — Evolução do modelo
+
+O EP2 evolui a solução do EP1 com fine-tuning de transformers em português e
+um **stacking** que combina os modelos. O treino é o mesmo do EP1
+(`data/ep2/train.xlsx`); o `data/ep2/test2.xlsx` é a entrega oficial e o
+`data/ep2/test1-rotulado-para-teste-estatistico.xlsx` é usado apenas no teste
+de McNemar EP1 × EP2.
+
+## Protocolo de avaliação
+
+- 5-fold `StratifiedGroupKFold` **agrupado por texto** (textos idênticos nunca
+  ficam ao mesmo tempo em treino e validação), `random_state = 42`.
+- Cada modelo de base gera previsões *out-of-fold* (OOF) do treino e prevê os
+  testes pela média dos 5 modelos dos folds (`results/oof/*.npz`).
+- Toda escolha de modelo usa somente o treino. O teste 1 é lido uma única
+  vez, pelo `experiments/mcnemar.py`.
+
+## Modelo final
+
+Meta-Regressão Logística (stacking) sobre as log-probabilidades de 4 bases:
+
+| Base | Descrição | OOF |
+|---|---|---|
+| `tfidf` | TF-IDF palavra (1,2) + características estruturais + LR | 0,4619 |
+| `ep1_ensemble` | modelo entregue no EP1, refeito fold a fold | 0,4608 |
+| `bertimbau_base` | BERTimbau-base fine-tuned (2 épocas, head+tail 256) | 0,4572 |
+| `bertimbau_large` | BERTimbau-large fine-tuned (lr 1e-5) | 0,4564 |
+
+mais 3 atributos simples do texto e uma **regra de lookup**: textos do teste
+idênticos a textos do treino sem rótulo conflitante recebem o rótulo do
+treino. Resultado: **0,4718 ± 0,005** na CV agrupada (EP1 no mesmo
+protocolo: 0,4608). No teste 1: **EP2 0,4978 × EP1 0,4922** (McNemar exato
+p = 0,74).
+
+## Reprodução
+
+```bash
+python -m pip install -r requirements.txt
+
+# 1. Bases clássicas (OOF + testes)
+python -m experiments.kfold_classicos tfidf ep1_ensemble
+
+# 2. Transformers (um por vez; retomáveis por fold; use caffeinate no macOS)
+python -m experiments.kfold_transformer --model neuralmind/bert-base-portuguese-cased --tag bertimbau_base --epochs 2
+python -m experiments.kfold_transformer --model neuralmind/bert-large-portuguese-cased --tag bertimbau_large --epochs 2 --lr 1e-5 --batch-size 8 --grad-accum 2
+
+# 3. Stacking (escolhe a combinação só com o treino e salva a configuração)
+python -m experiments.stacking tfidf ep1_ensemble bertimbau_base bertimbau_large
+
+# 4. Planilhas finais (validações de linhas, ordem e rótulos)
+python -m experiments.predict_ep2    # results/ep2/test2_rotulado.xlsx (entrega) e test1_ep2.xlsx
+
+# 5. Análises e teste estatístico
+python -m experiments.analise_ep2
+python -m experiments.mcnemar
+python -m experiments.resumo_ep2
+```
+
+## Ruído de rótulo (por que a acurácia satura)
+
+Medido nos textos duplicados do treino: pares de **textos idênticos** recebem
+o mesmo rótulo em apenas **39,8%** dos casos (acaso ≈ 33%). Prevendo o rótulo
+majoritário das outras cópias, o teto é 48,7% nessas linhas. Quando as 4
+bases concordam (51% do treino), acertam só 52,6%. O rótulo depende de
+fatores fora do texto (a pergunta original, os anexos, o avaliador), o que
+limita qualquer modelo a ~0,49–0,50 no teste.
+
+## Tentativas que não entraram no modelo final
+
+Avaliadas no mesmo protocolo e mantidas como resultados negativos
+(tabela completa em `results/ep2/resumo_ep2.csv`):
+
+- perda ordinal SORD (0,4600) e treino tratado (0,4606): melhoram a base,
+  mas não somam ao stacking;
+- confident learning / cleanlab 10% e 20% (0,4581 / 0,4554);
+- Albertina-100M (divergiu), SetFit contrastivo (0,427) e Tucano-1b1 + LoRA
+  (0,444): abaixo das bases atuais;
+- atributos extras na meta-LR: features de clareza feitas à mão (0,4703) e
+  LLM avaliador zero-shot Qwen2.5-3B (0,4705), ambos abaixo dos 0,4718;
+- ensemble clássico, decomposição ordinal, seleção chi², class_weight e
+  lookup como atributo (EP1/escada incremental).
+
+As análises de características ficam em `results/ep2/analise/` (coeficientes
+da meta-LR, n-gramas por classe, diversidade entre bases, matriz de confusão,
+features de clareza) e alimentam o relatório.
