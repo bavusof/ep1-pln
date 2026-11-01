@@ -24,6 +24,7 @@ from src.finetune_bert import prever_probabilidades, selecionar_device, treinar_
 from src.oof import acuracia_por_fold, arquivo_fold, carregar_textos_teste, consolidar, folds_ep2, salvar_fold
 from src.results import registrar_experimento
 from src.text_preprocessing import limpar_para_bert
+from src.ruido_rotulos import mascara_manter
 from src.tratamento_dados import tratar_treino
 
 
@@ -52,9 +53,13 @@ def main() -> None:
     parser.add_argument("--lora", action="store_true", help="treina só adaptadores LoRA (LLMs)")
     parser.add_argument("--lora-r", type=int, default=16)
     parser.add_argument("--lora-alpha", type=int, default=32)
+    parser.add_argument("--cleanlab-frac", type=float, default=None,
+                        help="remove essa fração de linhas de menor qualidade de rótulo (confident learning)")
     parser.add_argument("--treino-limpo", action="store_true",
                         help="aplica src/tratamento_dados.py à parte de treino de cada fold")
     args = parser.parse_args()
+    if args.cleanlab_frac and args.treino_limpo:
+        parser.error("--cleanlab-frac e --treino-limpo não são combináveis")
 
     X, y = carregar_dados_treino()
     testes = carregar_textos_teste()
@@ -95,6 +100,10 @@ def main() -> None:
             originais, rotulos_treino, relatorio = tratar_treino(X.to_numpy(dtype=object)[treino], y_arr[treino])
             textos_treino = np.array([limpar_para_bert(t) for t in originais], dtype=object)
             print(f"Treino limpo: {relatorio}", flush=True)
+        if args.cleanlab_frac:
+            manter, rel = mascara_manter(X.to_numpy(dtype=object)[treino], y_arr[treino], args.cleanlab_frac, fold=fold)
+            textos_treino, rotulos_treino = textos_treino[manter], rotulos_treino[manter]
+            print(f"Cleanlab: {rel}", flush=True)
         model, tokenizer, historico, probs_por_epoca = treinar_bert(
             textos_treino.tolist(),
             rotulos_treino.tolist(),
@@ -138,7 +147,7 @@ def main() -> None:
                 "accuracy": float(acc_folds.mean()),
                 "accuracy_std": float(acc_folds.std()),
                 "f1_macro": float(f1_score(y_arr, pred, average="macro")),
-                "parameters": {**params, "treino_limpo": args.treino_limpo},
+                "parameters": {**params, "treino_limpo": args.treino_limpo, "cleanlab_frac": args.cleanlab_frac},
                 "notes": "Época final fixa; previsões de teste = média dos 5 modelos dos folds.",
             }
         )

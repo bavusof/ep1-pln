@@ -10,3 +10,4 @@ transformers>=4.45
 accelerate>=1.0
 setfit>=1.2
 peft>=0.21
+cleanlab>=2.9

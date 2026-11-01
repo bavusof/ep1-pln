@@ -35,6 +35,7 @@ from src.incremental import CONFIG_INICIAL, construir_pipeline
 from src.oof import acuracia_por_fold, carregar_textos_teste, consolidar, folds_ep2, salvar_fold
 from src.results import registrar_experimento
 from src.sentence_embeddings import carregar_ou_gerar_embeddings
+from src.ruido_rotulos import mascara_manter
 from src.tratamento_dados import tratar_treino
 
 
@@ -48,10 +49,15 @@ def _ordenar(modelo, probs):
     return probs[:, [list(modelo.classes_).index(c) for c in CLASSES]]
 
 
-def _fold_tfidf(X, y, treino, validacao, testes, limpo=False):
+def _fold_tfidf(X, y, treino, validacao, testes, limpo=False, fold=None, frac_cl=None):
     X_tr, y_tr = X[treino], y[treino]
     if limpo:
         X_tr, y_tr, _ = tratar_treino(X_tr, y_tr)
+    if frac_cl is not None:
+        # Confident learning: remove a fração de menor qualidade, estimada só com o treino do fold.
+        manter, rel = mascara_manter(X_tr, y_tr, frac_cl, fold=fold)
+        print(f"fold {fold}: cleanlab removeu {rel['removidas']} linhas {rel['removidas_por_classe']}", flush=True)
+        X_tr, y_tr = X_tr[manter], y_tr[manter]
     modelo = construir_pipeline(CONFIG_TFIDF).fit(X_tr, y_tr)
     prever = lambda textos: _ordenar(modelo, modelo.predict_proba(textos))
     return validacao, prever(X[validacao]), prever(testes["test1"]), prever(testes["test2"])
@@ -100,9 +106,11 @@ def _fold_ep1(X, y, emb, treino, validacao, testes, emb_testes):
 def executar(tag, X, y, splits, testes) -> None:
     X_arr, y_arr = X.to_numpy(dtype=object), y.to_numpy()
     testes_arr = {k: v.to_numpy(dtype=object) for k, v in testes.items()}
-    if tag in ("tfidf", "tfidf_limpo"):
+    if tag in ("tfidf", "tfidf_limpo") or tag.startswith("tfidf_cl"):
         limpo = tag == "tfidf_limpo"
-        tarefas = [delayed(_fold_tfidf)(X_arr, y_arr, tr, va, testes_arr, limpo) for tr, va in splits]
+        frac_cl = int(tag.removeprefix("tfidf_cl")) / 100 if tag.startswith("tfidf_cl") else None
+        tarefas = [delayed(_fold_tfidf)(X_arr, y_arr, tr, va, testes_arr, limpo, fold, frac_cl)
+                   for fold, (tr, va) in enumerate(splits)]
     else:
         emb = embeddings(X, "train")
         emb_testes = {k: embeddings(v, k) for k, v in testes.items()}
@@ -129,7 +137,8 @@ def executar(tag, X, y, splits, testes) -> None:
             "accuracy_std": float(acc.std()),
             "f1_macro": float(f1_score(y_arr, pred, average="macro")),
             "notes": "Previsões de teste = média dos 5 modelos dos folds."
-                     + (" Treino de cada fold tratado (src/tratamento_dados.py)." if tag.endswith("_limpo") else ""),
+                     + (" Treino de cada fold tratado (src/tratamento_dados.py)." if tag.endswith("_limpo") else "")
+                     + (f" Cleanlab: {tag.removeprefix('tfidf_cl')}% das linhas de menor qualidade removidas do treino de cada fold." if "_cl" in tag else ""),
         }
     )
 

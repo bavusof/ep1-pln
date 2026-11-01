@@ -230,3 +230,4 @@ results/submission/test_fake*
 results/incremental/cache/
 .DS_Store
 results/oof/*_fold*.npz
+results/oof/ruido_qualidade_fold*.npy
