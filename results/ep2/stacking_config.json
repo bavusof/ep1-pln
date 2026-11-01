@@ -2,15 +2,16 @@
   "bases": [
     "tfidf",
     "ep1_ensemble",
-    "bertimbau_base",
+    "bertimbau_base_cl10",
     "bertimbau_large"
   ],
+  "extras": [],
   "estrategia": "meta_lr",
   "lookup": {
     "usar": true,
     "min_copias": 1,
     "pureza": 1.0
   },
-  "cv_accuracy": 0.4718296260095225,
+  "cv_accuracy": 0.4723762823798114,
   "C": 0.01
 }

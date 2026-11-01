@@ -715,14 +715,14 @@ Meta-Regressão Logística (stacking) sobre as log-probabilidades de 4 bases:
 |---|---|---|
 | `tfidf` | TF-IDF palavra (1,2) + características estruturais + LR | 0,4619 |
 | `ep1_ensemble` | modelo entregue no EP1, refeito fold a fold | 0,4608 |
-| `bertimbau_base` | BERTimbau-base fine-tuned (2 épocas, head+tail 256) | 0,4572 |
+| `bertimbau_base_cl10` | BERTimbau-base fine-tuned com confident learning (cleanlab remove os 10% de rótulos de pior qualidade do treino de cada fold) | 0,4612 |
 | `bertimbau_large` | BERTimbau-large fine-tuned (lr 1e-5) | 0,4564 |
 
 mais 3 atributos simples do texto e uma **regra de lookup**: textos do teste
 idênticos a textos do treino sem rótulo conflitante recebem o rótulo do
-treino. Resultado: **0,4718 ± 0,005** na CV agrupada (EP1 no mesmo
-protocolo: 0,4608). No teste 1: **EP2 0,4978 × EP1 0,4922** (McNemar exato
-p = 0,74).
+treino. Resultado: **0,4724 ± 0,006** na CV agrupada (EP1 no mesmo
+protocolo: 0,4608). No teste 1: **EP2 0,5000 × EP1 0,4922** (McNemar exato
+p = 0,61 — não significativo, coerente com o teto de ruído abaixo).
 
 ## Reprodução
 
@@ -733,11 +733,11 @@ python -m pip install -r requirements.txt
 python -m experiments.kfold_classicos tfidf ep1_ensemble
 
 # 2. Transformers (um por vez; retomáveis por fold; use caffeinate no macOS)
-python -m experiments.kfold_transformer --model neuralmind/bert-base-portuguese-cased --tag bertimbau_base --epochs 2
+python -m experiments.kfold_transformer --model neuralmind/bert-base-portuguese-cased --tag bertimbau_base_cl10 --cleanlab-frac 0.10 --epochs 2
 python -m experiments.kfold_transformer --model neuralmind/bert-large-portuguese-cased --tag bertimbau_large --epochs 2 --lr 1e-5 --batch-size 8 --grad-accum 2
 
 # 3. Stacking (escolhe a combinação só com o treino e salva a configuração)
-python -m experiments.stacking tfidf ep1_ensemble bertimbau_base bertimbau_large
+python -m experiments.stacking tfidf ep1_ensemble bertimbau_base_cl10 bertimbau_large
 
 # 4. Planilhas finais (validações de linhas, ordem e rótulos)
 python -m experiments.predict_ep2    # results/ep2/test2_rotulado.xlsx (entrega) e test1_ep2.xlsx
@@ -764,7 +764,10 @@ Avaliadas no mesmo protocolo e mantidas como resultados negativos
 
 - perda ordinal SORD (0,4600) e treino tratado (0,4606): melhoram a base,
   mas não somam ao stacking;
-- confident learning / cleanlab 10% e 20% (0,4581 / 0,4554);
+- confident learning no TF-IDF (cleanlab 10%/20%: 0,4581/0,4554) — no
+  BERTimbau, porém, o cleanlab 10% melhorou a base (0,4572 → 0,4612) e
+  **entrou no modelo final** no lugar do BERT original;
+- BERTimbau-base original (0,4572): substituído pela variante cleanlab;
 - Albertina-100M (divergiu), SetFit contrastivo (0,427) e Tucano-1b1 + LoRA
   (0,444): abaixo das bases atuais;
 - atributos extras na meta-LR: features de clareza feitas à mão (0,4703) e
