@@ -77,7 +77,9 @@ def avaliar_lote(model, tokenizer, textos, ids, device) -> np.ndarray:
     for nome, pergunta in PERGUNTAS.items():
         prompts = [montar_prompt(tokenizer, t, pergunta) for t in textos]
         lote = tokenizer(prompts, return_tensors="pt", padding=True).to(device)
-        logits = model(**lote).logits[:, -1, :].float()  # padding à esquerda: último token = início da resposta
+        # logits_to_keep=1: só a última posição (padding à esquerda: último token = início da resposta).
+        # Sem isso o modelo devolve logits do vocabulário inteiro para todas as posições (~1,5 GB/lote).
+        logits = model(**lote, logits_to_keep=1).logits[:, -1, :].float()
         if nome == "nota":
             p = torch.softmax(logits[:, ids["nota"]], dim=-1).cpu().numpy()
             saida[:, 0:5] = p
@@ -127,7 +129,7 @@ def main() -> None:
         for (k, _), v in zip(lote, valores):
             cache[k] = v
         desde_salvo += len(lote)
-        if desde_salvo >= 500 or i + args.batch_size >= len(pendentes):
+        if desde_salvo >= (50 if args.amostra else 500) or i + args.batch_size >= len(pendentes):
             salvar_cache(cache)
             desde_salvo = 0
             feitos = i + len(lote)
