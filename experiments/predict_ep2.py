@@ -25,6 +25,7 @@ from src.config import (
     COLUNA_TEXTO,
     STACKING_CONFIG_FILE,
 )
+from src.atributos_extras import carregar_extras
 from src.data import carregar_dados_treino
 from src.oof import carregar_base
 from src.stacking import aplicar_media_ponderada, aplicar_regra_lookup, lookup_teste, montar_atributos
@@ -35,7 +36,8 @@ TAMANHOS_ESPERADOS = {"test1": 900, "test2": 897}
 def prever(config, nome_teste, textos, X_treino, y_treino) -> tuple[np.ndarray, int]:
     probs = {nome: carregar_base(nome)[nome_teste] for nome in config["bases"]}
     if config["estrategia"] == "meta_lr":
-        pred = joblib.load(META_MODELO_FILE).predict(montar_atributos(probs, textos))
+        extras = carregar_extras(config.get("extras", []), textos)
+        pred = joblib.load(META_MODELO_FILE).predict(montar_atributos(probs, textos, extras))
     else:
         pred = aplicar_media_ponderada(probs, config["pesos"])
     alterados = 0

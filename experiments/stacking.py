@@ -13,6 +13,7 @@ A estratégia vencedora é reajustada em todo o OOF e salva para o
 
     python -m experiments.stacking [base1 base2 ...]
     python -m experiments.stacking --nao-salvar base1 base2 ...   # exploratório: não altera o modelo final
+    python -m experiments.stacking --extras=clareza,llm base1 ... # + atributos sem rótulo
 """
 
 import json
@@ -27,6 +28,7 @@ from src.config import CLASSES, EP2_RESULTS_DIR, OOF_DIR, RANDOM_STATE, STACKING
 from src.data import carregar_dados_treino
 from src.incremental import grupos_por_texto
 from src.oof import carregar_base
+from src.atributos_extras import carregar_extras
 from src.results import registrar_experimento, salvar_tabela
 from src.stacking import (
     ajustar_media_ponderada,
@@ -62,7 +64,8 @@ def escolher_C(Z, y, grupos) -> float:
 def main() -> None:
     argumentos = sys.argv[1:]
     salvar = "--nao-salvar" not in argumentos
-    nomes = [a for a in argumentos if a != "--nao-salvar"] or bases_disponiveis()
+    extras_nomes = next((a.split("=", 1)[1].split(",") for a in argumentos if a.startswith("--extras=")), [])
+    nomes = [a for a in argumentos if not a.startswith("--")] or bases_disponiveis()
     X, y = carregar_dados_treino()
     X_arr, y_arr = X.to_numpy(dtype=object), y.to_numpy()
     grupos = grupos_por_texto(X_arr)
@@ -72,9 +75,9 @@ def main() -> None:
     for nome, base in bases.items():
         assert (base["fold_ids"] == fold_ids).all(), f"{nome} usa folds diferentes"
     oof = {nome: base["oof"] for nome, base in bases.items()}
-    Z = montar_atributos(oof, X_arr)
+    Z = montar_atributos(oof, X_arr, carregar_extras(extras_nomes, X_arr))
     folds = sorted(np.unique(fold_ids))
-    print(f"Bases: {nomes}")
+    print(f"Bases: {nomes} | extras: {extras_nomes or 'nenhum'}")
 
     # ---------- CV externa ----------
     preds = {f"base:{n}": np.array(CLASSES)[p.argmax(1)] for n, p in oof.items()}
@@ -126,7 +129,7 @@ def main() -> None:
         return
 
     # ---------- Ajuste final em todo o OOF ----------
-    config = {"bases": nomes, "estrategia": vencedora,
+    config = {"bases": nomes, "extras": extras_nomes, "estrategia": vencedora,
               "lookup": {"usar": usar_lookup, "min_copias": int(melhor_regra["min_copias"]), "pureza": float(melhor_regra["pureza"])},
               "cv_accuracy": float(tabela.set_index("estrategia").loc[vencedora, "accuracy"])}
     if base_unica is not None:

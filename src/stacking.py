@@ -57,7 +57,7 @@ def _normalizar_lookup(contagens) -> np.ndarray:
     return np.hstack([fracoes, np.log1p(total)])
 
 
-def montar_atributos(probs_por_base: dict[str, np.ndarray], textos) -> np.ndarray:
+def montar_atributos(probs_por_base: dict[str, np.ndarray], textos, extras=None) -> np.ndarray:
     """log-probabilidades de cada base + atributos simples do texto.
 
     O lookup de duplicatas NÃO entra aqui: no CV agrupado as cópias de um
@@ -65,7 +65,10 @@ def montar_atributos(probs_por_base: dict[str, np.ndarray], textos) -> np.ndarra
     e não-zero no teste. Ele é tratado como regra pós-stacking.
     """
     blocos = [np.log(np.clip(probs_por_base[nome], EPS, 1.0)) for nome in sorted(probs_por_base)]
-    return np.hstack(blocos + [atributos_texto(textos)])
+    blocos.append(atributos_texto(textos))
+    if extras is not None:
+        blocos.append(np.asarray(extras, dtype=float))  # atributos sem rótulo (src/atributos_extras.py)
+    return np.hstack(blocos)
 
 
 def aplicar_regra_lookup(pred, lookup, *, min_copias: int, pureza: float) -> tuple[np.ndarray, np.ndarray]:
