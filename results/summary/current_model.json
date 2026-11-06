@@ -1,7 +1,7 @@
 {
   "experiment_id": "current_model",
   "name": "tfidf_word_current",
-  "description": "Configuração atual em desenvolvimento.",
+  "description": "Melhor TF-IDF palavra + Regressão Logística encontrado no tuning (tuning_tfidf_word).",
   "type": "tfidf_word",
   "representation": "TF-IDF palavra",
   "model": "Regressão Logística",
@@ -10,22 +10,22 @@
       1,
       2
     ],
-    "min_df": 1,
+    "min_df": 5,
     "max_df": 1.0,
     "sublinear_tf": true,
-    "C": 1.0
+    "C": 0.5
   },
   "evaluation": {
     "method": "StratifiedKFold",
     "folds": 5,
-    "accuracy": 0.46177613776076826,
-    "accuracy_std": 0.008166560528483352,
-    "f1_macro": 0.4607977863646161,
-    "f1_macro_std": 0.008106055793219269,
-    "train_accuracy": 0.8288870484926149,
-    "train_accuracy_std": 0.0025500982123773334,
-    "train_f1_macro": 0.8285401095457893,
-    "train_f1_macro_std": 0.0025682529916683287,
-    "accuracy_gap": 0.3671109107318466
+    "accuracy": 0.4619252552367296,
+    "accuracy_std": 0.0060868829831499625,
+    "f1_macro": 0.4597807559577206,
+    "f1_macro_std": 0.005971647101620957,
+    "train_accuracy": 0.6876244172791303,
+    "train_accuracy_std": 0.0027507376830401007,
+    "train_f1_macro": 0.6866351278450965,
+    "train_f1_macro_std": 0.0028631493087006177,
+    "accuracy_gap": 0.22569916204240065
   }
 }

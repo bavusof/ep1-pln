@@ -1,0 +1,2 @@
+acc_ep1,acc_ep2,ambos_acertam,so_ep1_acerta,so_ep2_acerta,ambos_erram,mcnemar_exato_p,mcnemar_chi2_corrigido,mcnemar_chi2_p,significativo_5pct
+0.4922222222222222,0.5,376,67,74,383,0.6135127096954125,0.2553191489361702,0.6133543559547467,False

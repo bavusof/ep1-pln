@@ -6,7 +6,7 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.linear_model import LogisticRegression
 from sklearn.pipeline import FeatureUnion, Pipeline
 from sklearn.feature_selection import SelectPercentile, chi2
-from sklearn.base import BaseEstimator, ClassifierMixin
+from sklearn.base import BaseEstimator, ClassifierMixin, clone
 from sklearn.preprocessing import StandardScaler
 from sklearn.svm import LinearSVC
 
@@ -226,12 +226,80 @@ DEFAULT_LOGISTIC_PARAMS = {
 }
 
 
-def criar_regressao_logistica(C: float = 1.0) -> LogisticRegression:
-    """Cria a Regressão Logística padrão do projeto."""
+def criar_regressao_logistica(C: float = 1.0, *, class_weight=None) -> LogisticRegression:
+    """Cria a Regressão Logística padrão do projeto.
+
+    class_weight permite rebalancear a decisão (ex.: 'balanced' ou um dicionário
+    por classe) sem alterar o restante da configuração.
+    """
     return LogisticRegression(
         C=C,
+        class_weight=class_weight,
         **DEFAULT_LOGISTIC_PARAMS,
     )
+
+
+class OrdinalClarityClassifier(BaseEstimator, ClassifierMixin):
+    """Decomposição ordinal para c1 < c234 < c5.
+
+    Treina dois classificadores binários cumulativos sobre a MESMA
+    representação de atributos:
+        clf1: P(y >= c234)   -> {c1} vs {c234, c5}
+        clf2: P(y >= c5)     -> {c1, c234} vs {c5}
+
+    As probabilidades das três classes vêm das diferenças cumulativas
+    (com clip e renormalização para lidar com inversões):
+        P(c1)   = 1 - P(>=c234)
+        P(c234) = P(>=c234) - P(>=c5)
+        P(c5)   = P(>=c5)
+
+    `features` é um transformador (não ajustado) que produz a matriz de
+    atributos; ele é clonado para cada um dos dois classificadores.
+    """
+
+    ORDEM = {"c1": 0, "c234": 1, "c5": 2}
+
+    def __init__(self, features, *, C=1.0, class_weight=None):
+        self.features = features
+        self.C = C
+        self.class_weight = class_weight
+
+    def _criar_binario(self):
+        return Pipeline(
+            [
+                ("features", clone(self.features)),
+                ("logistic", criar_regressao_logistica(C=self.C, class_weight=self.class_weight)),
+            ]
+        )
+
+    @staticmethod
+    def _indice_positivo(classificador):
+        return int(np.where(classificador.classes_ == 1)[0][0])
+
+    def fit(self, X, y):
+        rank = np.array([self.ORDEM[v] for v in np.asarray(y)])
+
+        self.clf_ge_c234_ = self._criar_binario().fit(X, (rank >= 1).astype(int))
+        self.clf_ge_c5_ = self._criar_binario().fit(X, (rank >= 2).astype(int))
+        self.classes_ = np.array(["c1", "c234", "c5"], dtype=object)
+        return self
+
+    def predict_proba(self, X):
+        p_ge_c234 = self.clf_ge_c234_.predict_proba(X)[:, self._indice_positivo(self.clf_ge_c234_)]
+        p_ge_c5 = self.clf_ge_c5_.predict_proba(X)[:, self._indice_positivo(self.clf_ge_c5_)]
+
+        probabilidades = np.column_stack(
+            [
+                1.0 - p_ge_c234,
+                p_ge_c234 - p_ge_c5,
+                p_ge_c5,
+            ]
+        )
+        probabilidades = np.clip(probabilidades, 1e-9, None)
+        return probabilidades / probabilidades.sum(axis=1, keepdims=True)
+
+    def predict(self, X):
+        return self.classes_[self.predict_proba(X).argmax(axis=1)]
 
 
 def criar_tfidf_word(

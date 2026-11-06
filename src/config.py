@@ -26,7 +26,9 @@ for directory in (
 # DADOS
 # ============================================================
 
-ARQUIVO_TREINO = DATA_DIR / "train.xlsx"
+# O treino do EP2 é o mesmo do EP1 (mesmo arquivo), reorganizado em data/ep2/.
+EP2_DATA_DIR = DATA_DIR / "ep2"
+ARQUIVO_TREINO = EP2_DATA_DIR / "train.xlsx"
 COLUNA_TEXTO = "resp_text"
 COLUNA_CLASSE = "clarity"
 
@@ -107,3 +109,50 @@ CURRENT_MODEL_FILE = SUMMARY_RESULTS_DIR / "current_model.json"
 # ============================================================
 
 ERROR_ANALYSIS_DIR = RESULTS_DIR / "error_analysis"
+
+# ============================================================
+# FINE-TUNING BERT
+# ============================================================
+
+FINETUNE_MODEL_NAME = "neuralmind/bert-base-portuguese-cased"
+FINETUNE_PARAMS = {
+    "max_length": 256,
+    "head_tokens": 128,
+    "epochs": 3,
+    "batch_size": 16,
+    "learning_rate": 2e-5,
+    "weight_decay": 0.01,
+    "warmup_ratio": 0.1,
+}
+FINETUNE_RESULTS_DIR = RESULTS_DIR / "finetune"
+FINETUNE_HOLDOUT_PROBS_FILE = FINETUNE_RESULTS_DIR / "bert_holdout_probs.csv"
+FINETUNE_HISTORY_FILE = FINETUNE_RESULTS_DIR / "bert_holdout_history.csv"
+MODELS_DIR = ROOT_DIR / "models"
+FINETUNE_FULL_MODEL_DIR = MODELS_DIR / "bert_finetuned_full"
+
+# ============================================================
+# ENSEMBLE E PREDIÇÃO FINAL
+# ============================================================
+
+ENSEMBLE_RESULTS_FILE = TUNING_RESULTS_DIR / "ensemble_holdout.csv"
+ARQUIVO_TESTE = DATA_DIR / "test.xlsx"
+ARQUIVO_PREDICOES = RESULTS_DIR / "submission" / "test_rotulado.xlsx"
+
+
+# ============================================================
+# EP2
+# ============================================================
+
+# Teste 2: entrega oficial do EP2 (sem rótulos). Nunca usar para comparar modelos.
+ARQUIVO_TESTE2 = EP2_DATA_DIR / "test2.xlsx"
+# Teste 1: gabarito divulgado apenas para o teste de McNemar EP1 x EP2.
+ARQUIVO_TESTE1_ROTULADO = EP2_DATA_DIR / "test1-rotulado-para-teste-estatistico.xlsx"
+# Rótulos do teste 1 entregues no EP1.
+ARQUIVO_EP1_TESTE1 = ROOT_DIR / "test1_rotulado.xlsx"
+
+OOF_DIR = RESULTS_DIR / "oof"
+EP2_RESULTS_DIR = RESULTS_DIR / "ep2"
+EP2_ANALISE_DIR = EP2_RESULTS_DIR / "analise"
+ARQUIVO_TESTE2_ROTULADO = EP2_RESULTS_DIR / "test2_rotulado.xlsx"
+ARQUIVO_TESTE1_EP2 = EP2_RESULTS_DIR / "test1_ep2.xlsx"
+STACKING_CONFIG_FILE = EP2_RESULTS_DIR / "stacking_config.json"

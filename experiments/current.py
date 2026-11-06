@@ -15,16 +15,16 @@ from src.results import registrar_experimento, salvar_modelo_atual
 CURRENT_MODEL = {
     "experiment_id": "current_model",
     "name": "tfidf_word_current",
-    "description": "Configuração atual em desenvolvimento.",
+    "description": "Melhor TF-IDF palavra + Regressão Logística encontrado no tuning (tuning_tfidf_word).",
     "type": "tfidf_word",
     "representation": "TF-IDF palavra",
     "model": "Regressão Logística",
     "parameters": {
         "ngram_range": (1, 2),
-        "min_df": 1,
+        "min_df": 5,
         "max_df": 1.0,
         "sublinear_tf": True,
-        "C": 1.0,
+        "C": 0.5,
     },
 }
 
